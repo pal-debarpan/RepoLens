@@ -26,6 +26,7 @@ def test_health_endpoint(client: TestClient) -> None:
     data = response.json()
     assert isinstance(data, dict)
     assert data["status"] == "healthy"
+    assert data["service"] == "repolens-backend"
     assert "environment" in data
     assert "version" in data
 

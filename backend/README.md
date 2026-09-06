@@ -1,14 +1,14 @@
 # Repolens Backend
 
-Repolens backend service built with FastAPI, providing repository analysis, blast-radius estimation, and architecture insights.
+Repolens backend service built with FastAPI, providing repository analysis, blast-radius estimation, and architectural code insights.
 
 ## Current Technology
 
 - **Language:** Python 3.13+
-- **Framework:** FastAPI
+- **Framework:** FastAPI (with `lifespan` lifecycle management)
 - **ASGI Server:** Uvicorn
 - **Data Validation & Settings:** Pydantic & pydantic-settings
-- **Testing:** Pytest & HTTPX (TestClient)
+- **Testing:** Pytest & HTTPX (FastAPI TestClient)
 
 ## Project Structure
 
@@ -16,7 +16,7 @@ Repolens backend service built with FastAPI, providing repository analysis, blas
 backend/
 ├── app/
 │   ├── __init__.py             # Backend package initialization
-│   ├── main.py                 # FastAPI application and base endpoints (/, /health)
+│   ├── main.py                 # FastAPI application, CORS, lifespan, and root endpoints
 │   │
 │   ├── api/
 │   │   ├── __init__.py
@@ -26,16 +26,17 @@ backend/
 │   │
 │   ├── core/
 │   │   ├── __init__.py
-│   │   └── config.py           # Application settings with pydantic-settings
+│   │   └── config.py           # Centralized configuration with pydantic-settings
 │   │
 │   ├── schemas/
 │   │   ├── __init__.py
-│   │   └── common.py           # Common response models
+│   │   └── common.py           # Response models (HealthResponse, RootResponse, ErrorResponse)
 │   │
 │   └── tests/
 │       ├── __init__.py
-│       ├── conftest.py         # Pytest fixtures and test client setup
-│       └── test_health.py      # Health, root, and status verification tests
+│       ├── conftest.py         # Pytest fixtures and TestClient setup
+│       ├── test_core.py        # Metadata, OpenAPI, CORS, and v1 router tests
+│       └── test_health.py      # Health, root, and 404 response tests
 │
 ├── .venv/                      # Python virtual environment (ignored in git)
 ├── .env.example                # Example environment configuration
@@ -86,6 +87,8 @@ Available configuration options:
 | `APP_NAME` | Name of the application | `"Repolens API"` |
 | `APP_VERSION` | Version of the application | `"0.1.0"` |
 | `ENVIRONMENT` | Deployment environment (`development`, `production`, etc.) | `"development"` |
+| `API_V1_PREFIX` | Base path prefix for API v1 routes | `"/api/v1"` |
+| `CORS_ORIGINS` | Permitted origins for CORS (comma-separated or JSON list) | `["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"]` |
 
 ### 4. Run the Development Server
 
@@ -99,6 +102,7 @@ uvicorn app.main:app --reload --port 8000
 The API will be available at:
 - **Root:** [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
 - **Health Check:** [http://127.0.0.1:8000/health](http://127.0.0.1:8000/health)
+- **API v1 Base:** [http://127.0.0.1:8000/api/v1](http://127.0.0.1:8000/api/v1)
 - **Interactive API Docs (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Alternative API Docs (ReDoc):** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
