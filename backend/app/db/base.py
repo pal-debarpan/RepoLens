@@ -7,3 +7,6 @@ class Base(DeclarativeBase):
     Future models (repositories, analyses, findings, users) will inherit from this base.
     """
     pass
+
+# Import models so that Base.metadata has them registered for Alembic
+import app.models  # noqa

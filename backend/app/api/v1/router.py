@@ -1,6 +1,9 @@
 from fastapi import APIRouter
 
-api_router = APIRouter()
+from app.api.v1.endpoints import repositories
 
-# Future milestone routers (e.g. repositories, analysis, auth, graph, chat)
+api_router = APIRouter()
+api_router.include_router(repositories.router, prefix="/repositories", tags=["repositories"])
+
+# Future milestone routers (e.g. analysis, graph, chat)
 # will be mounted here using api_router.include_router(...)

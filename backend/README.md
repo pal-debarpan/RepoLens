@@ -110,7 +110,24 @@ Available configuration options:
 | `DB_MAX_OVERFLOW` | Maximum pool overflow connections | `10` |
 | `CORS_ORIGINS` | Permitted origins for CORS (comma-separated or JSON list) | `["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"]` |
 
-### 4. Run the Development Server
+### 4. Database Migrations
+
+Repolens uses Alembic to manage database migrations.
+
+To apply all migrations to your Supabase PostgreSQL database:
+
+```bash
+# From the backend directory
+alembic upgrade head
+```
+
+To autogenerate a new migration after updating SQLAlchemy models:
+
+```bash
+alembic revision --autogenerate -m "describe changes here"
+```
+
+### 5. Run the Development Server
 
 Start the server with Uvicorn:
 
@@ -126,7 +143,7 @@ The API will be available at:
 - **Interactive API Docs (Swagger):** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
 - **Alternative API Docs (ReDoc):** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
 
-### 5. Run Tests
+### 6. Run Tests
 
 Run the test suite with `pytest`:
 
@@ -140,3 +157,13 @@ Or for verbose test output:
 ```bash
 pytest -v
 ```
+
+## API Features
+
+### Repositories API
+The Repositories API (`/api/v1/repositories`) provides the foundation for adding codebases for analysis. 
+- Create a new repository to analyze (`POST /api/v1/repositories/`)
+- Retrieve repositories (`GET /api/v1/repositories/`)
+- Get, update, or delete an existing repository by ID
+
+*Note: Repositories are globally available for analysis and are not owned by any individual user.*
