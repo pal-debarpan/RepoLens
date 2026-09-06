@@ -13,6 +13,9 @@ class RepositoryBase(BaseModel):
     primary_language: Optional[str] = None
     description: Optional[str] = None
     latest_commit_sha: Optional[str] = None
+    workspace_path: Optional[str] = Field(None, description="Path to local extracted source code.")
+    file_count: Optional[int] = Field(None, description="Number of files in the repository.")
+    total_size_bytes: Optional[int] = Field(None, description="Total size of the repository in bytes.")
 
 
 class RepositoryCreate(RepositoryBase):
@@ -32,6 +35,25 @@ class RepositoryUpdate(BaseModel):
     primary_language: Optional[str] = None
     description: Optional[str] = None
     latest_commit_sha: Optional[str] = None
+    workspace_path: Optional[str] = None
+    file_count: Optional[int] = None
+    total_size_bytes: Optional[int] = None
+
+
+class GitHubIngestRequest(BaseModel):
+    url: Optional[str] = Field(None, description="The GitHub repository URL (e.g., https://github.com/org/repo)")
+    source_url: Optional[str] = Field(None, description="The GitHub repository URL (e.g., https://github.com/org/repo)")
+
+    @model_validator(mode='after')
+    def validate_github_url(self) -> "GitHubIngestRequest":
+        target = self.url or self.source_url
+        if not target:
+            raise ValueError("Either 'url' or 'source_url' must be provided.")
+        if not (target.startswith("https://github.com/") or target.startswith("http://github.com/")):
+            raise ValueError("GitHub URL must start with https://github.com/")
+        self.url = target
+        self.source_url = target
+        return self
 
 
 class RepositoryResponse(RepositoryBase):

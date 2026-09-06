@@ -12,6 +12,12 @@ class CRUDRepository:
     def get(self, db: Session, id: UUID) -> Optional[Repository]:
         return db.query(Repository).filter(Repository.id == id).first()
 
+    def get_by_source(self, db: Session, *, source_type: str, source_url: str) -> Optional[Repository]:
+        return db.query(Repository).filter(
+            Repository.source_type == source_type,
+            Repository.source_url == source_url
+        ).first()
+
     def get_multi(self, db: Session, *, skip: int = 0, limit: int = 100) -> List[Repository]:
         return db.query(Repository).offset(skip).limit(limit).all()
 

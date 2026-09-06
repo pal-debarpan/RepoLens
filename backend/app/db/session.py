@@ -91,3 +91,8 @@ def reset_db_state() -> None:
             pass
     _engine = None
     _session_factory = None
+
+
+def SessionLocal() -> Session:
+    """Convenience factory function for creating a new Session (e.g., in background threads)."""
+    return get_session_factory()()

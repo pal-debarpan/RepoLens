@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
 
+    # Ingestion Configuration
+    INGESTION_WORKSPACE_ROOT: str | None = None  # Falls back to system temp dir if None
+    MAX_UPLOAD_SIZE_MB: int = 50
+    MAX_ZIP_ENTRIES: int = 10000
+    MAX_EXTRACTED_SIZE_MB: int = 250
+    MAX_FILE_SIZE_MB: int = 10
+    INGESTION_TIMEOUT_SECONDS: int = 60
+
     # Default CORS origins for development (Vite, Next.js frontend dev ports)
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
@@ -24,6 +32,15 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ]
+
+    # Supabase Auth Configuration
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_JWT_SECRET: str | None = None
+
+    # Gemini AI Configuration (for explanation chat only)
+    GEMINI_API_KEY: str | None = None
+    GEMINI_MODEL: str = "gemini-1.5-flash"
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
