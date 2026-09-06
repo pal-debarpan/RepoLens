@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     # Gemini AI Configuration (for explanation chat only)
     GEMINI_API_KEY: str | None = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash-lite"
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

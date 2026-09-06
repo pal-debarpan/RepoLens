@@ -19,32 +19,40 @@ When you reference a file, use its relative path exactly as shown."""
 def _build_messages(
     request: ChatRequest,
     analysis_context: dict[str, Any] | None,
-) -> list[dict[str, str]]:
-    messages = [{"role": "user", "parts": [{"text": SYSTEM_PROMPT}]}]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    # System instruction payload for Gemini API
+    system_instruction = {
+        "parts": [{"text": SYSTEM_PROMPT}]
+    }
 
-    # Inject analysis context as user-facing summary
+    messages: list[dict[str, Any]] = []
+
+    # Inject analysis context as first message if available
+    context_prefix = ""
     if analysis_context:
-        ctx_text = (
-            f"Repository analysis context:\n"
-            f"- Repository: {analysis_context.get('repo_name', 'Unknown')}\n"
-            f"- Quality Score: {analysis_context.get('quality_score', 'N/A')}/100\n"
-            f"- Blast Radius (max): {analysis_context.get('blast_radius_max', 'N/A')}\n"
-            f"- Total Files: {analysis_context.get('file_count', 'N/A')}\n"
-            f"- Total Findings: {analysis_context.get('total_findings', 'N/A')}\n"
+        context_prefix = (
+            f"[Analysis Context]\n"
+            f"Repository: {analysis_context.get('repo_name', 'Unknown')}\n"
+            f"Quality Score: {analysis_context.get('quality_score', 'N/A')}/100\n"
+            f"Blast Radius Max: {analysis_context.get('blast_radius_max', 'N/A')}\n"
+            f"Total Files: {analysis_context.get('file_count', 'N/A')}\n"
+            f"Total Findings: {analysis_context.get('total_findings', 'N/A')}\n"
         )
         if request.context_file:
-            ctx_text += f"- Current focus file: {request.context_file}\n"
-        messages.append({"role": "model", "parts": [{"text": ctx_text}]})
+            context_prefix += f"Active Focused File: {request.context_file}\n"
+        if analysis_context.get("findings_summary"):
+            context_prefix += f"Key Findings: {analysis_context.get('findings_summary')}\n"
 
     # Add conversation history
-    for msg in request.history[-8:]:  # Only last 8 turns to keep context manageable
+    for msg in request.history[-8:]:
         role = "user" if msg.role == "user" else "model"
         messages.append({"role": role, "parts": [{"text": msg.content}]})
 
-    # Add current user message
-    messages.append({"role": "user", "parts": [{"text": request.message}]})
+    # Prepare current user prompt
+    current_text = f"{context_prefix}\n\nUser Question: {request.message}" if context_prefix and not messages else request.message
+    messages.append({"role": "user", "parts": [{"text": current_text}]})
 
-    return messages
+    return system_instruction, messages
 
 
 async def chat_with_gemini(
@@ -60,52 +68,66 @@ async def chat_with_gemini(
         logger.info("GEMINI_API_KEY not configured — using mock chat response")
         return _mock_chat_response(request, analysis_context)
 
-    messages = _build_messages(request, analysis_context)
-    model = settings.GEMINI_MODEL or "gemini-1.5-flash"
+    system_instruction, messages = _build_messages(request, analysis_context)
+    primary_model = settings.GEMINI_MODEL or "gemini-3.5-flash"
+    candidate_models = [primary_model, "gemini-3.5-flash-lite", "gemini-3.5-flash"]
+    
+    # Deduplicate while preserving order
+    seen = set()
+    models_to_try = [m for m in candidate_models if not (m in seen or seen.add(m))]
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-    payload = {
-        "contents": messages,
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 1024,
-        },
-    }
+    for model in models_to_try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+        payload = {
+            "systemInstruction": system_instruction,
+            "contents": messages,
+            "generationConfig": {
+                "temperature": 0.3,
+                "maxOutputTokens": 1200,
+            },
+        }
 
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                url,
-                json=payload,
-                headers={"x-goog-api-key": settings.GEMINI_API_KEY},
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    url,
+                    json=payload,
+                )
+                response.raise_for_status()
+
+            data = response.json()
+            candidates = data.get("candidates", [])
+            if not candidates:
+                continue
+
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            answer = parts[0].get("text", "").strip() if parts else ""
+
+            if not answer:
+                continue
+
+            # Detect referenced files in the reply if context_file or known patterns match
+            referenced_files = []
+            if request.context_file and request.context_file in answer:
+                referenced_files.append(request.context_file)
+
+            return ChatResponse(
+                answer=answer,
+                referenced_files=referenced_files,
+                referenced_findings=[],
+                model_used=model,
             )
-            response.raise_for_status()
 
-        data = response.json()
-        candidates = data.get("candidates", [])
-        if not candidates:
-            raise ValueError("Empty candidates in Gemini response")
+        except httpx.HTTPStatusError as e:
+            logger.warning("Gemini API HTTP error with model %s: %s %s", model, e.response.status_code, e.response.text)
+            continue
+        except Exception as e:
+            logger.warning("Gemini API error with model %s: %s", model, str(e))
+            continue
 
-        content = candidates[0].get("content", {})
-        parts = content.get("parts", [])
-        answer = parts[0].get("text", "").strip() if parts else ""
-
-        if not answer:
-            raise ValueError("Empty text in Gemini response")
-
-        return ChatResponse(
-            answer=answer,
-            referenced_files=[],
-            referenced_findings=[],
-            model_used=model,
-        )
-
-    except httpx.HTTPStatusError as e:
-        logger.error("Gemini API HTTP error: %s %s", e.response.status_code, e.response.text)
-        return _fallback_response(request, analysis_context, str(e))
-    except Exception as e:
-        logger.error("Gemini API error: %s", str(e))
-        return _fallback_response(request, analysis_context, str(e))
+    logger.error("All Gemini model attempts failed. Returning fallback.")
+    return _fallback_response(request, analysis_context, "Model connection error")
 
 
 def _mock_chat_response(

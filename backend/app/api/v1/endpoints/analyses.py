@@ -475,10 +475,40 @@ async def chat(
     db: Session = Depends(get_db),
     current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
 ) -> ChatResponse:
+    from app.core.config import settings
+
     if _is_demo(analysis_id):
+        if settings.GEMINI_API_KEY:
+            demo_context = {
+                "repo_name": "repolens-demo (paypal/paymentService.js)",
+                "quality_score": 72.4,
+                "blast_radius_max": 72.0,
+                "file_count": 15,
+                "total_findings": 4,
+                "findings_summary": (
+                    "1. CRITICAL (Security): Hardcoded payment gateway API secret in src/services/paymentService.js (line 14). "
+                    "2. HIGH (Architecture): Circular dependency between src/services/paymentService.js and src/services/notificationService.js. "
+                    "3. MEDIUM (Architecture): High fan-in on src/utils/logger.js (9 callers). "
+                    "4. Blast radius analysis: paymentService.js changes affect 11 downstream files including 2 API entry points."
+                ),
+            }
+            res = await chat_with_gemini(body, demo_context)
+            if res.model_used != "fallback":
+                return res
         return get_demo_chat_response(body.message)
 
     analysis = _get_analysis_or_404(db, analysis_id)
+
+    # Collect findings summary for better AI grounding
+    findings = (
+        db.query(Finding)
+        .filter(Finding.analysis_id == analysis_id)
+        .limit(10)
+        .all()
+    )
+    findings_summary = "; ".join(
+        [f"{f.severity.value} ({f.category.value}): {f.title} in {f.file_path}" for f in findings]
+    )
 
     # Build analysis context for Gemini
     context = {
@@ -486,7 +516,8 @@ async def chat(
         "quality_score": analysis.quality_score,
         "blast_radius_max": analysis.blast_radius_max,
         "file_count": analysis.file_count,
-        "total_findings": (analysis.summary or {}).get("total_findings", "N/A"),
+        "total_findings": (analysis.summary or {}).get("total_findings", len(findings)),
+        "findings_summary": findings_summary,
     }
 
     # Enrich with repo name if available

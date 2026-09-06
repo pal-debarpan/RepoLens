@@ -1,0 +1,16 @@
+{
+  "name": "repolens",
+  "version": "1.0.0",
+  "description": "RepoLens - AI-Powered Repository Intelligence Platform",
+  "private": true,
+  "scripts": {
+    "dev": "npm run kill-ports && concurrently --kill-others-on-fail --prefix-colors \"cyan,magenta\" --names \"BACKEND,FRONTEND\" \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:backend": "cd backend && .venv\\Scripts\\uvicorn app.main:app --reload --host 127.0.0.1 --port 8000",
+    "dev:frontend": "cd frontend && npm run dev",
+    "kill-ports": "npx -y kill-port 8000 5173 || true",
+    "install:all": "cd frontend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
