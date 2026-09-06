@@ -6,6 +6,7 @@ class HealthResponse(BaseModel):
     service: str = "repolens-backend"
     version: str
     environment: str
+    database: str = "not_configured"
 
 
 class RootResponse(BaseModel):

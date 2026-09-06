@@ -1,3 +1,4 @@
+import logging
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -13,19 +14,33 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.db.session import check_db_connectivity, reset_db_state
 from app.schemas.common import HealthResponse, RootResponse
+
+logger = logging.getLogger("repolens.main")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan context manager.
-    
-    Acts as a clean lifecycle extension point for future resources
-    (e.g., database connections, external clients, analysis engines).
+
+    Acts as a clean lifecycle extension point for resources
+    (e.g., database connection pool, external clients, analysis engines).
     """
     # Startup phase
+    if settings.DATABASE_URL:
+        is_connected, error = check_db_connectivity()
+        if is_connected:
+            logger.info("Database connection established successfully.")
+        else:
+            logger.warning("Database configured but connectivity check failed: %s", error)
+    else:
+        logger.info("Database not configured (DATABASE_URL is not set).")
+
     yield
-    # Shutdown phase
+
+    # Shutdown phase: release database engine resources cleanly
+    reset_db_state()
 
 
 app = FastAPI(
@@ -67,10 +82,16 @@ def root() -> RootResponse:
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 def health_check() -> HealthResponse:
-    """Health check endpoint confirming service operational status."""
+    """Health check endpoint confirming service and database operational status."""
+    db_status = "not_configured"
+    if settings.DATABASE_URL:
+        is_connected, _ = check_db_connectivity()
+        db_status = "connected" if is_connected else "disconnected"
+
     return HealthResponse(
         status="healthy",
         service="repolens-backend",
         version=settings.APP_VERSION,
         environment=settings.ENVIRONMENT,
+        database=db_status,
     )

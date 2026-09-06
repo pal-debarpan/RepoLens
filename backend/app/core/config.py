@@ -11,6 +11,12 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
     API_V1_STR: str = "/api/v1"
 
+    # Database Configuration (Supabase PostgreSQL via psycopg)
+    DATABASE_URL: str | None = None
+    DB_POOL_PRE_PING: bool = True
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 10
+
     # Default CORS origins for development (Vite, Next.js frontend dev ports)
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
@@ -19,12 +25,26 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: Any) -> Any:
+        """Normalize postgres connection strings to use the psycopg 3 driver."""
+        if isinstance(v, str):
+            v_stripped = v.strip()
+            if not v_stripped:
+                return None
+            if v_stripped.startswith("postgres://"):
+                return "postgresql+psycopg://" + v_stripped[len("postgres://"):]
+            if v_stripped.startswith("postgresql://") and "+psycopg" not in v_stripped:
+                return "postgresql+psycopg://" + v_stripped[len("postgresql://"):]
+            return v_stripped
+        return v
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Any) -> list[str]:
         """Support comma-separated strings or list representations from environment variables."""
         if isinstance(v, str):
-            # Check if JSON list formatted string or comma-separated
             v_stripped = v.strip()
             if v_stripped.startswith("[") and v_stripped.endswith("]"):
                 import json

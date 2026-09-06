@@ -29,6 +29,7 @@ def test_health_endpoint(client: TestClient) -> None:
     assert data["service"] == "repolens-backend"
     assert "environment" in data
     assert "version" in data
+    assert "database" in data
 
 
 def test_not_found_endpoint(client: TestClient) -> None:
