@@ -30,13 +30,18 @@ def ingest_github(
     request: schemas.GitHubIngestRequest,
 ) -> Any:
     """
-    Ingest a public GitHub repository.
+    Ingest a GitHub repository.
+
+    Public repositories work without authentication.
+    Private repositories require a `pat` (GitHub Personal Access Token) in the request body.
+    The PAT is never stored — it is used only to verify access and perform the clone.
     """
     target_url = request.url or request.source_url
     if not target_url:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Either 'url' or 'source_url' must be provided.")
     try:
-        ingested = ingest_github_repo(target_url)
+        # pat is passed through but never stored in the DB
+        ingested = ingest_github_repo(target_url, pat=request.pat)
     except SecurityError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except ResourceLimitError as e:

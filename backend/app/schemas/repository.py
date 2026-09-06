@@ -43,6 +43,11 @@ class RepositoryUpdate(BaseModel):
 class GitHubIngestRequest(BaseModel):
     url: Optional[str] = Field(None, description="The GitHub repository URL (e.g., https://github.com/org/repo)")
     source_url: Optional[str] = Field(None, description="The GitHub repository URL (e.g., https://github.com/org/repo)")
+    pat: Optional[str] = Field(
+        None,
+        exclude=True,  # Never serialized — never appears in responses or logs
+        description="GitHub Personal Access Token for private repository access. Not stored.",
+    )
 
     @model_validator(mode='after')
     def validate_github_url(self) -> "GitHubIngestRequest":

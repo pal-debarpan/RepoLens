@@ -155,10 +155,14 @@ export const repoService = {
     return created;
   },
 
-  ingestGithub: async (url: string): Promise<{ repository: any; analysis?: any } | null> => {
+  ingestGithub: async (url: string, pat?: string): Promise<{ repository: any; analysis?: any } | null> => {
+    const body: Record<string, string> = { url };
+    if (pat && pat.trim()) {
+      body.pat = pat.trim();
+    }
     const res = await fetchApi<any>('/repositories/github', {
       method: 'POST',
-      body: JSON.stringify({ url }),
+      body: JSON.stringify(body),
     });
     if (res && res.id) {
       // Trigger analysis immediately
@@ -426,5 +430,58 @@ export const testingService = {
 export const explorerService = {
   getFileTree: async (_repoId?: string): Promise<FileTreeNode[]> => {
     return Promise.resolve([...MOCK_FILE_TREE]);
+  },
+};
+
+/**
+ * userService — calls POST /users/me on login to upsert the user row in Supabase.
+ * The backend extracts id and email from the verified JWT — they cannot be spoofed.
+ */
+export const userService = {
+  /**
+   * Call immediately after a successful Supabase login.
+   * Passes the session access token so the backend can verify identity.
+   */
+  syncUser: async (
+    accessToken: string,
+    opts?: { displayName?: string; avatarUrl?: string; provider?: string }
+  ): Promise<{ id: string; email: string } | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/users/me`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          display_name: opts?.displayName ?? null,
+          avatar_url: opts?.avatarUrl ?? null,
+          provider: opts?.provider ?? null,
+        }),
+      });
+      if (!res.ok) {
+        console.warn('userService.syncUser failed:', res.status);
+        return null;
+      }
+      return await res.json();
+    } catch (err) {
+      console.warn('userService.syncUser error:', err);
+      return null;
+    }
+  },
+
+  /**
+   * Fetch the current user's stored profile (requires auth token).
+   */
+  getProfile: async (accessToken: string): Promise<any | null> => {
+    try {
+      const res = await fetch(`${API_BASE}/users/me`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch {
+      return null;
+    }
   },
 };
