@@ -12,7 +12,7 @@ export const BlastRadiusPage: React.FC = () => {
 
   const [targets, setTargets] = useState<BlastRadiusTarget[]>([]);
   const [selectedTargetId, setSelectedTargetId] = useState<string>('target-auth');
-  const [depthHops, setDepthHops] = useState<number>(3);
+  const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [simulationActive, setSimulationActive] = useState(false);
 
   useEffect(() => {
@@ -153,8 +153,8 @@ export const BlastRadiusPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Target Selector & Depth Hop Slider Bar */}
-      <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high flex flex-col md:flex-row md:items-center justify-between gap-space-md shadow-sm">
+      {/* Target Selector Bar */}
+      <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high flex items-center justify-between gap-space-md shadow-sm">
         {/* Target Component Dropdown */}
         <div className="flex items-center gap-space-sm flex-1">
           <span className="text-outline text-xs font-label-caps uppercase font-semibold">
@@ -171,26 +171,6 @@ export const BlastRadiusPage: React.FC = () => {
               </option>
             ))}
           </select>
-        </div>
-
-        {/* Depth Traversal Slider */}
-        <div className="flex items-center gap-space-sm">
-          <span className="text-outline text-xs font-label-caps uppercase font-semibold">
-            Ripple Depth:
-          </span>
-          <div className="flex items-center gap-2">
-            <input
-              type="range"
-              min="1"
-              max="5"
-              value={depthHops}
-              onChange={(e) => setDepthHops(Number(e.target.value))}
-              className="accent-primary-container w-28 cursor-pointer"
-            />
-            <span className="font-code text-xs font-bold text-primary-container w-12 text-center px-1.5 py-0.5 rounded bg-surface-container">
-              {depthHops} {depthHops === 1 ? 'hop' : 'hops'}
-            </span>
-          </div>
         </div>
       </div>
 
@@ -294,7 +274,8 @@ export const BlastRadiusPage: React.FC = () => {
           nodes={blastNodes}
           links={blastLinks}
           height={500}
-          selectedNodeId="target_node"
+          selectedNodeId={selectedGraphNodeId}
+          onNodeSelect={(node) => setSelectedGraphNodeId(node?.id ?? null)}
         />
       </div>
 

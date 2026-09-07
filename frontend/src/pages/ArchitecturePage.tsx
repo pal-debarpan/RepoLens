@@ -34,8 +34,8 @@ export const ArchitecturePage: React.FC = () => {
             </span>
           </div>
           <p className="font-body-md text-body-md text-on-surface-variant mt-1">
-            Topological layer mapping, coupling metrics, and structural boundaries for{' '}
-            <span className="font-code text-on-surface font-semibold">{activeRepo?.name}</span>.
+            Topological layer mapping, structural boundaries for{' '}
+            <span className="font-code text-on-surface font-semibold">{activeRepo?.name}</span> and UML Based Architecture.
           </p>
         </div>
 

@@ -2,53 +2,64 @@ import React from 'react';
 
 interface RepoLensLogoProps {
   className?: string;
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg' | 'xl';
   showVersion?: boolean;
+  variant?: 'full' | 'icon';
+  onClick?: () => void;
 }
 
 export const RepoLensLogo: React.FC<RepoLensLogoProps> = ({
   className = '',
   size = 'md',
-  showVersion = true,
+  showVersion = false,
+  variant = 'full',
+  onClick,
 }) => {
-  const sizeClasses = {
+  const fullHeights = {
+    sm: 'h-7',
+    md: 'h-9',
+    lg: 'h-11',
+    xl: 'h-14',
+  };
+
+  const iconSizes = {
     sm: 'h-6 w-6',
     md: 'h-8 w-8',
     lg: 'h-10 w-10',
+    xl: 'h-14 w-14',
   };
 
+  if (variant === 'icon') {
+    return (
+      <div
+        onClick={onClick}
+        className={`inline-flex items-center justify-center select-none ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''} ${className}`}
+      >
+        <img
+          src="/repolens-icon-only.png"
+          alt="RepoLens Mark"
+          className={`${iconSizes[size]} object-contain drop-shadow-[0_0_8px_rgba(182,255,46,0.3)]`}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex items-center gap-space-xs ${className}`}>
-      <div className={`relative flex items-center justify-center ${sizeClasses[size]}`}>
-        {/* RepoLens Optical Lens Mark */}
-        <svg
-          viewBox="0 0 48 48"
-          className="w-full h-full text-primary-container"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <rect width="48" height="48" rx="8" fill="var(--color-surface-container-high)" />
-          <circle cx="21" cy="21" r="13" stroke="currentColor" strokeWidth="3" />
-          <circle cx="21" cy="21" r="6" fill="currentColor" opacity="0.8" />
-          <line x1="31" y1="31" x2="40" y2="40" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
-          <circle cx="37" cy="11" r="2.5" fill="#7bd0ff" />
-        </svg>
-      </div>
-      <div className="flex flex-col">
-        <div className="flex items-center gap-1.5">
-          <span className="font-display font-bold tracking-wider text-on-surface text-sm uppercase">
-            RepoLens
-          </span>
-          {showVersion && (
-            <span className="font-code text-[10px] px-1 py-0.2 rounded bg-surface-container-highest text-primary-container font-mono">
-              v2.4
-            </span>
-          )}
-        </div>
-        <span className="font-code text-[9px] text-on-surface-variant tracking-tight uppercase">
-          AST Engine active
+    <div
+      onClick={onClick}
+      className={`inline-flex items-center gap-2 select-none ${onClick ? 'cursor-pointer hover:opacity-90 transition-opacity' : ''} ${className}`}
+    >
+      <img
+        src="/repolens-logo-only.png"
+        alt="repolens"
+        className={`${fullHeights[size]} w-auto object-contain drop-shadow-[0_0_12px_rgba(182,255,46,0.25)]`}
+      />
+      {showVersion && (
+        <span className="font-code text-[10px] px-1.5 py-0.5 rounded bg-surface-container-highest text-primary-container font-mono border border-surface-container-high self-center">
+          v2.4
         </span>
-      </div>
+      )}
     </div>
   );
 };
+

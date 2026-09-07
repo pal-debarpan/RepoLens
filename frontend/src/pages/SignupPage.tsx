@@ -1,307 +1,465 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import {
+  ArrowRight,
+  Check,
+  ShieldCheck,
+  Eye,
+  EyeOff,
+} from 'lucide-react';
 import { RepoLensLogo } from '../components/common/RepoLensLogo';
-import { useApp } from '../context';
-import { supabase } from '../services/supabaseClient';
-import { userService, setAuthToken } from '../services/api';
+import { useApp, useWaterNavigate } from '../context';
+import { DoodleBackdrop } from '../components/common/DoodleBackdrop';
 
 export const SignupPage: React.FC = () => {
-  const navigate = useNavigate();
-  const { theme, toggleTheme, setUser, refreshRepositories } = useApp();
+  const { waterNavigate } = useWaterNavigate();
+  const { theme, login } = useApp();
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [teamName, setTeamName] = useState('');
-  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('Alex Vance');
+  const [email, setEmail] = useState('alex.vance@blackmesa.tech');
+  const [teamName, setTeamName] = useState('Core Architecture Guild');
+  const [password, setPassword] = useState('sUp3r-S3cur3-p@ss');
+  const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<'name' | 'team' | 'email' | 'password' | null>(null);
+
+  const isDark = theme !== 'light';
 
   const calculateStrength = (p: string) => {
-    if (p.length >= 12) return { text: 'Strong', width: 'w-full', color: 'bg-primary-container' };
-    if (p.length >= 8) return { text: 'Good', width: 'w-3/4', color: 'bg-secondary' };
-    if (p.length >= 6) return { text: 'Fair', width: 'w-1/2', color: 'bg-amber-400' };
-    return { text: 'Weak', width: 'w-1/4', color: 'bg-error' };
+    if (p.length > 12)
+      return {
+        text: 'Strong',
+        width: 'w-full',
+        color: isDark ? 'bg-[#B6FF3C]' : 'bg-[#046A38]',
+      };
+    if (p.length > 8)
+      return { text: 'Good', width: 'w-3/4', color: 'bg-sky-400' };
+    if (p.length > 4)
+      return { text: 'Fair', width: 'w-1/2', color: 'bg-amber-400' };
+    return { text: 'Weak', width: 'w-1/4', color: 'bg-rose-500' };
   };
 
   const strength = calculateStrength(password);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
-
-    if (password.length < 6) {
-      setErrorMsg('Password must be at least 6 characters long.');
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: {
-          data: {
-            display_name: fullName,
-            team_name: teamName,
-          },
-        },
-      });
-
-      if (error) {
-        setErrorMsg(error.message || 'Registration failed. Please try again.');
-        setLoading(false);
-        return;
-      }
-
-      if (data.session && data.user) {
-        // Immediate session active (email confirmation not blocking)
-        const token = data.session.access_token;
-        setAuthToken(token);
-
-        await userService.syncUser(token, {
-          displayName: fullName || email.split('@')[0],
-          provider: 'email',
-        });
-
-        setUser({
-          email: data.user.email || email,
-          displayName: fullName || email.split('@')[0],
-          provider: 'email',
-        });
-
-        await refreshRepositories();
-        setLoading(false);
-        navigate('/ingest');
-      } else if (data.user) {
-        // Registration created, pending email confirmation
-        setSuccessMsg(
-          'Account created successfully! Please check your email inbox to confirm your account, then sign in.'
-        );
-        setLoading(false);
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'An unexpected error occurred during registration.');
-      setLoading(false);
-    }
-  };
-
-  const handleOAuthSignup = async (providerName: 'github' | 'gitlab') => {
-    setErrorMsg(null);
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: providerName as any,
-        options: {
-          redirectTo: `${window.location.origin}/app`,
-        },
-      });
-      if (error) {
-        setErrorMsg(`OAuth failed: ${error.message}`);
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'OAuth authentication error');
-    }
+    login(email, fullName);
+    waterNavigate('/home');
   };
 
   return (
-    <div className="min-h-screen bg-background text-on-surface font-body flex flex-col justify-between p-4 sm:p-6 relative overflow-hidden">
-      {/* Background Decorative Glow */}
-      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[350px] bg-primary-container/10 rounded-full blur-[110px] pointer-events-none" />
+    <div
+      className={`min-h-screen flex flex-col justify-between p-4 sm:p-6 sm:py-8 relative overflow-hidden transition-colors duration-300 select-none ${
+        isDark ? 'bg-[#0D0F0D] text-[#F2F2F2]' : 'bg-[#F7F1E3] text-[#181D17]'
+      }`}
+    >
+      {/* Interactive Reactive Technical Doodle Backdrop */}
+      <DoodleBackdrop />
 
-      {/* Top Header */}
-      <header className="flex items-center justify-between max-w-5xl mx-auto w-full">
-        <Link to="/">
-          <RepoLensLogo size="md" />
-        </Link>
+      {/* Top Header with Logo */}
+      <header className="relative z-10 flex items-center justify-between w-full">
         <button
-          onClick={toggleTheme}
-          className="p-2 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-colors"
-          title="Toggle theme"
+          type="button"
+          onClick={(e) => waterNavigate('/', e)}
+          className="page-link transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-container rounded-lg cursor-pointer"
         >
-          <span className="material-symbols-outlined text-[20px]">
-            {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-          </span>
+          <RepoLensLogo size="md" />
         </button>
       </header>
 
-      {/* Main Signup Card */}
-      <main className="w-full max-w-lg mx-auto my-auto py-8">
-        <div className="bg-surface-container-low border border-surface-container-high rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
-          <div className="space-y-1 text-center">
-            <h1 className="font-headline-lg text-2xl font-bold text-on-surface">
-              Create Your RepoLens Workspace
+      {/* Main Single-Column Centered Card */}
+      <main className="relative z-10 w-full max-w-[480px] mx-auto my-auto py-8">
+        <div
+          className={`p-7 sm:p-9 rounded-2xl border transition-all duration-300 space-y-7 ${
+            isDark
+              ? 'bg-[#121512] border-[#2A2A2A] shadow-[0_8px_32px_rgba(0,0,0,0.5)]'
+              : 'bg-[#FFFFFF] border-[#E0D7C6] shadow-[0_4px_24px_rgba(40,30,20,0.06)]'
+          }`}
+        >
+          {/* Bold Headline & Descriptive Subtext */}
+          <div className="space-y-2 text-center">
+            <h1
+              className={`font-heading text-2xl sm:text-[26px] font-bold tracking-tight ${
+                isDark ? 'text-[#F2F2F2]' : 'text-[#181D17]'
+              }`}
+            >
+              Create Your Workspace
             </h1>
-            <p className="font-body-md text-xs text-on-surface-variant">
-              Continuous AST intelligence, blast radius mapping, and security auditing for your team.
+            <p
+              className={`text-xs sm:text-[13px] font-sans leading-relaxed ${
+                isDark ? 'text-[#9A9A9A]' : 'text-[#6E685E]'
+              }`}
+            >
+              Continuous AST intelligence, blast radius mapping, and security auditing for your engineering team.
             </p>
           </div>
 
-          {/* Feedback Messages */}
-          {errorMsg && (
-            <div className="p-3.5 rounded-lg bg-error-container/20 border border-error/50 text-error flex items-start gap-2.5 text-xs font-medium">
-              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">error</span>
-              <div className="flex-1">
-                <span className="font-bold block">Registration Error</span>
-                <span>{errorMsg}</span>
-              </div>
-            </div>
-          )}
+          {/* Continue with Google SSO (Dummy Button) */}
+          <button
+            type="button"
+            className={`w-full flex items-center justify-center gap-3 h-11 px-4 rounded-xl border font-sans text-xs sm:text-[13px] font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 cursor-pointer ${
+              isDark
+                ? 'bg-[#171B17] hover:bg-[#1F251F] text-[#F2F2F2] border-[#2A2A2A] hover:border-[#384238] hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-[#B6FF3C]'
+                : 'bg-[#FAF6EE] hover:bg-[#F2ECE0] text-[#181D17] border-[#E0D7C6] hover:border-[#D0C5AF] hover:-translate-y-0.5 hover:shadow-sm focus-visible:ring-[#046A38]'
+            }`}
+          >
+            <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
+              <path
+                fill="#4285F4"
+                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+              />
+              <path
+                fill="#34A853"
+                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+              />
+              <path
+                fill="#FBBC05"
+                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+              />
+              <path
+                fill="#EA4335"
+                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+              />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
 
-          {successMsg && (
-            <div className="p-3.5 rounded-lg bg-primary-container/20 border border-primary-container/50 text-primary-container flex items-start gap-2.5 text-xs font-medium">
-              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">check_circle</span>
-              <div className="flex-1">
-                <span className="font-bold block">Account Created</span>
-                <span>{successMsg}</span>
-              </div>
-            </div>
-          )}
 
-          {/* Social OAuth Providers */}
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => handleOAuthSignup('github')}
-              className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
-            >
-              <span className="material-symbols-outlined text-[18px]">deployed_code</span>
-              <span>Sign up with GitHub</span>
-            </button>
-            <button
-              onClick={() => handleOAuthSignup('gitlab')}
-              className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
-            >
-              <span className="material-symbols-outlined text-[18px]">merge</span>
-              <span>Sign up with GitLab</span>
-            </button>
-          </div>
-
+          {/* "OR EMAIL" Divider with Horizontal Rules */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-surface-container-high" />
-            <span className="text-[11px] font-code text-outline uppercase">Or register with email</span>
-            <div className="flex-1 h-px bg-surface-container-high" />
+            <div
+              className={`flex-1 h-px ${
+                isDark ? 'bg-[#242A24]' : 'bg-[#E5DDCB]'
+              }`}
+            />
+            <span
+              className={`text-[10px] font-sans font-semibold tracking-widest uppercase ${
+                isDark ? 'text-[#7D8878]' : 'text-[#8A8275]'
+              }`}
+            >
+              OR REGISTER WITH EMAIL
+            </span>
+            <div
+              className={`flex-1 h-px ${
+                isDark ? 'bg-[#242A24]' : 'bg-[#E5DDCB]'
+              }`}
+            />
           </div>
 
           {/* Registration Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="font-body-sm text-xs text-on-surface font-medium">
-                  Full Name
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="signup-name"
+                    className={`flex items-center gap-1.5 font-sans text-xs font-medium transition-colors duration-200 ${
+                      focusedField === 'name'
+                        ? isDark
+                          ? 'text-[#B6FF3C]'
+                          : 'text-[#046A38]'
+                        : isDark
+                        ? 'text-[#E4E8E1]'
+                        : 'text-[#181D17]'
+                    }`}
+                  >
+                    <span>Full Name</span>
+                    {focusedField === 'name' && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                          isDark ? 'bg-[#B6FF3C]' : 'bg-[#046A38]'
+                        }`}
+                      />
+                    )}
+                  </label>
+                </div>
+                <div className="repolens-3d-input-group">
+                  <div
+                    className={`repolens-3d-halo ${
+                      focusedField === 'name' ? 'is-active' : ''
+                    }`}
+                  />
+                  <input
+                    id="signup-name"
+                    type="text"
+                    required
+                    value={fullName}
+                    onFocus={() => setFocusedField('name')}
+                    onBlur={() => setFocusedField(null)}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Alex Vance"
+                    className="repolens-3d-input"
+                  />
+                </div>
+              </div>
+
+              {/* Team Alias */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="signup-team"
+                    className={`flex items-center gap-1.5 font-sans text-xs font-medium transition-colors duration-200 ${
+                      focusedField === 'team'
+                        ? isDark
+                          ? 'text-[#B6FF3C]'
+                          : 'text-[#046A38]'
+                        : isDark
+                        ? 'text-[#E4E8E1]'
+                        : 'text-[#181D17]'
+                    }`}
+                  >
+                    <span>Team Alias</span>
+                    {focusedField === 'team' && (
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                          isDark ? 'bg-[#B6FF3C]' : 'bg-[#046A38]'
+                        }`}
+                      />
+                    )}
+                  </label>
+                </div>
+                <div className="repolens-3d-input-group">
+                  <div
+                    className={`repolens-3d-halo ${
+                      focusedField === 'team' ? 'is-active' : ''
+                    }`}
+                  />
+                  <input
+                    id="signup-team"
+                    type="text"
+                    required
+                    value={teamName}
+                    onFocus={() => setFocusedField('team')}
+                    onBlur={() => setFocusedField(null)}
+                    onChange={(e) => setTeamName(e.target.value)}
+                    placeholder="Core Architecture"
+                    className="repolens-3d-input"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Email Address */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="signup-email"
+                  className={`flex items-center gap-1.5 font-sans text-xs font-medium transition-colors duration-200 ${
+                    focusedField === 'email'
+                      ? isDark
+                        ? 'text-[#B6FF3C]'
+                        : 'text-[#046A38]'
+                      : isDark
+                      ? 'text-[#E4E8E1]'
+                      : 'text-[#181D17]'
+                  }`}
+                >
+                  <span>Email Address</span>
+                  {focusedField === 'email' && (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                        isDark ? 'bg-[#B6FF3C]' : 'bg-[#046A38]'
+                      }`}
+                    />
+                  )}
                 </label>
+              </div>
+              <div className="repolens-3d-input-group">
+                <div
+                  className={`repolens-3d-halo ${
+                    focusedField === 'email' ? 'is-active' : ''
+                  }`}
+                />
                 <input
-                  type="text"
+                  id="signup-email"
+                  type="email"
                   required
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Alex Vance"
-                  className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
+                  value={email}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="alex.vance@blackmesa.tech"
+                  className="repolens-3d-input"
                 />
               </div>
+            </div>
 
-              <div className="space-y-1">
-                <label className="font-body-sm text-xs text-on-surface font-medium">
-                  Team / Workspace Alias
+            {/* Password */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label
+                  htmlFor="signup-password"
+                  className={`flex items-center gap-1.5 font-sans text-xs font-medium transition-colors duration-200 ${
+                    focusedField === 'password'
+                      ? isDark
+                        ? 'text-[#B6FF3C]'
+                        : 'text-[#046A38]'
+                      : isDark
+                      ? 'text-[#E4E8E1]'
+                      : 'text-[#181D17]'
+                  }`}
+                >
+                  <span>Password</span>
+                  {focusedField === 'password' && (
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                        isDark ? 'bg-[#B6FF3C]' : 'bg-[#046A38]'
+                      }`}
+                    />
+                  )}
                 </label>
-                <input
-                  type="text"
-                  value={teamName}
-                  onChange={(e) => setTeamName(e.target.value)}
-                  placeholder="Core Guild"
-                  className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
-                />
+                <span
+                  className={`text-[11px] font-sans font-semibold ${
+                    isDark ? 'text-[#9A9A9A]' : 'text-[#6E685E]'
+                  }`}
+                >
+                  Min 8 chars
+                </span>
               </div>
-            </div>
+              <div className="repolens-3d-input-group flex items-center">
+                <div
+                  className={`repolens-3d-halo ${
+                    focusedField === 'password' ? 'is-active' : ''
+                  }`}
+                />
+                <input
+                  id="signup-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••••••"
+                  className="repolens-3d-input pr-10 tracking-wider"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className={`absolute right-3 z-10 p-1.5 rounded-md transition-colors cursor-pointer ${
+                    isDark
+                      ? 'text-[#7D8878] hover:text-[#B6FF3C] hover:bg-[#1E241E]'
+                      : 'text-[#8A8275] hover:text-[#046A38] hover:bg-[#E8E0D0]'
+                  }`}
+                  title={showPassword ? 'Hide password' : 'Show password'}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff size={16} strokeWidth={1.8} />
+                  ) : (
+                    <Eye size={16} strokeWidth={1.8} />
+                  )}
+                </button>
+              </div>
 
-            <div className="space-y-1">
-              <label className="font-body-sm text-xs text-on-surface font-medium">
-                Work Email
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="developer@company.com"
-                className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="font-body-sm text-xs text-on-surface font-medium">
-                Workstation Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Minimum 6 characters"
-                className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
-              />
-              {/* Password strength indicator */}
+              {/* Entropy Security Bar */}
               <div className="space-y-1 pt-1">
-                <div className="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
-                  <div className={`h-full transition-all duration-300 ${strength.width} ${strength.color}`} />
+                <div
+                  className={`w-full h-1.5 rounded-full overflow-hidden ${
+                    isDark ? 'bg-[#1E231D]' : 'bg-[#E8E0D0]'
+                  }`}
+                >
+                  <div
+                    className={`h-full transition-all duration-300 ${strength.width} ${strength.color}`}
+                  />
                 </div>
-                <div className="flex items-center justify-between text-[10px] font-code text-outline">
-                  <span>Password Security:</span>
-                  <span className="font-bold text-on-surface">{strength.text}</span>
+                <div className="flex items-center justify-between text-[10.5px] font-sans">
+                  <span className={isDark ? 'text-[#7D8878]' : 'text-[#8A8275]'}>
+                    Entropy Security:
+                  </span>
+                  <span
+                    className={`font-bold ${
+                      isDark ? 'text-[#B6FF3C]' : 'text-[#046A38]'
+                    }`}
+                  >
+                    {strength.text}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="text-xs font-body-sm text-on-surface-variant">
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  required
-                  checked={agreed}
-                  onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 rounded border-surface-container-highest accent-primary-container"
-                />
-                <span>
-                  I agree to the Terms of Service and allow RepoLens to execute local AST telemetry on uploaded codebases.
+            {/* Terms Checkbox */}
+            <div className="pt-1 text-xs">
+              <label className="flex items-start gap-2.5 cursor-pointer group select-none">
+                <div
+                  onClick={() => setAgreed(!agreed)}
+                  className={`mt-0.5 w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0 transition-all ${
+                    agreed
+                      ? isDark
+                        ? 'bg-[#B6FF3C] border-[#B6FF3C] text-[#0D0F0D]'
+                        : 'bg-[#046A38] border-[#046A38] text-[#FFFFFF]'
+                      : isDark
+                      ? 'bg-[#171B17] border-[#2A2A2A] group-hover:border-[#3A443A]'
+                      : 'bg-[#FAF6EE] border-[#E0D7C6] group-hover:border-[#D0C5AF]'
+                  }`}
+                >
+                  {agreed && <Check size={12} strokeWidth={2.5} />}
+                </div>
+                <span
+                  onClick={() => setAgreed(!agreed)}
+                  className={`font-sans leading-relaxed ${
+                    isDark ? 'text-[#9A9A9A]' : 'text-[#6E685E]'
+                  }`}
+                >
+                  I agree to the Terms of Service and authorize RepoLens to execute local AST telemetry on repositories.
                 </span>
               </label>
             </div>
 
+            {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading}
-              className="w-full py-2.5 rounded-lg bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container font-headline-sm text-xs font-semibold transition-all shadow-glow-lime flex items-center justify-center gap-2"
+              onClick={(e) => {
+                login(email, fullName);
+                waterNavigate('/home', e);
+              }}
+              className={`page-link w-full h-11 rounded-xl font-sans text-xs font-bold tracking-wide transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 cursor-pointer ${
+                isDark
+                  ? 'bg-[#B6FF3C] hover:bg-[#C4FF5E] text-[#0D0F0D] shadow-[0_0_20px_rgba(182,255,60,0.25)] hover:shadow-[0_0_28px_rgba(182,255,60,0.4)] focus-visible:ring-[#B6FF3C]'
+                  : 'bg-[#046A38] hover:bg-[#03542C] text-[#FFFFFF] shadow-[0_2px_12px_rgba(4,106,56,0.25)] hover:shadow-[0_4px_16px_rgba(4,106,56,0.35)] focus-visible:ring-[#046A38]'
+              }`}
             >
-              {loading ? (
-                <>
-                  <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
-                  <span>Creating Account...</span>
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined text-[16px]">rocket_launch</span>
-                  <span>Create Account &amp; Ingest Codebase</span>
-                </>
-              )}
+              <span>Create Account &amp; Ingest Codebase</span>
+              <ArrowRight size={15} strokeWidth={2.2} />
             </button>
           </form>
 
-          <div className="text-center text-xs text-outline font-body-sm">
-            Already have an account?{' '}
-            <Link to="/login" className="text-on-surface hover:text-primary-container font-semibold transition-colors">
+          {/* Footer Link: Sign In */}
+          <div
+            className={`text-center text-xs font-sans pt-1 ${
+              isDark ? 'text-[#9A9A9A]' : 'text-[#6E685E]'
+            }`}
+          >
+            <span>Already have an account? </span>
+            <button
+              type="button"
+              onClick={(e) => waterNavigate('/login', e)}
+              className={`page-link font-semibold hover:underline transition-colors cursor-pointer ${
+                isDark ? 'text-[#B6FF3C]' : 'text-[#046A38]'
+              }`}
+            >
               Sign In
-            </Link>
+            </button>
           </div>
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="text-center text-xs text-outline font-code max-w-5xl mx-auto w-full py-2">
-        <span>RepoLens Intelligence • Supabase Identity Authorization</span>
+      {/* Security Verification Footnote */}
+      <footer className="relative z-10 text-center text-xs font-sans max-w-5xl mx-auto w-full py-2">
+        <div
+          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full border text-[11px] ${
+            isDark
+              ? 'bg-[#121512] border-[#2A2A2A] text-[#7D8878]'
+              : 'bg-[#FFFFFF] border-[#E0D7C6] text-[#6E685E] shadow-sm'
+          }`}
+        >
+          <ShieldCheck
+            size={13}
+            className={isDark ? 'text-[#B6FF3C]' : 'text-[#046A38]'}
+          />
+          <span>RepoLens Intelligence • SOC2 Type II Certified AST Engine</span>
+        </div>
       </footer>
     </div>
   );
 };
-
-export default SignupPage;

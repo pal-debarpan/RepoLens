@@ -158,28 +158,28 @@ export const IssueDetailPage: React.FC = () => {
               Vulnerability Telemetry
             </h2>
 
-            <div className="grid grid-cols-2 gap-space-sm text-xs font-code">
+            <div className="grid grid-cols-2 gap-space-sm text-xs font-sans">
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase">Severity</span>
+                <span className="text-outline text-[10px] uppercase font-medium">Severity</span>
                 <div className="font-bold text-error mt-0.5">{issue.severity}</div>
               </div>
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase">Blast Risk Score</span>
-                <div className="font-bold text-amber-400 mt-0.5">{issue.blastRadiusScore}% Ripple</div>
+                <span className="text-outline text-[10px] uppercase font-medium">Blast Risk Score</span>
+                <div className="font-bold text-amber-400 mt-0.5 font-heading">{issue.blastRadiusScore}% Ripple</div>
               </div>
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase">Category</span>
+                <span className="text-outline text-[10px] uppercase font-medium">Category</span>
                 <div className="font-semibold text-on-surface mt-0.5">{issue.category}</div>
               </div>
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase">Status</span>
+                <span className="text-outline text-[10px] uppercase font-medium">Status</span>
                 <div className="font-semibold text-primary-container mt-0.5">
                   {patchApplied ? 'Resolved' : issue.status}
                 </div>
               </div>
             </div>
 
-            <p className="text-xs text-on-surface-variant leading-relaxed">
+            <p className="text-xs text-on-surface-variant leading-relaxed font-sans">
               {issue.description}
             </p>
           </div>
@@ -195,7 +195,7 @@ export const IssueDetailPage: React.FC = () => {
                   AI Remediation Patch
                 </h3>
               </div>
-              <span className="text-[10px] font-code px-1.5 py-0.5 rounded bg-surface-container-highest text-primary-container">
+              <span className="text-[10px] font-sans font-semibold px-1.5 py-0.5 rounded bg-surface-container-highest text-primary-container">
                 Safe AST Transform
               </span>
             </div>

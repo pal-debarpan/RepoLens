@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context';
+import { ThemeToggle } from '../components/common/ThemeToggle';
 
 export const SettingsPage: React.FC = () => {
   const {
@@ -18,7 +19,7 @@ export const SettingsPage: React.FC = () => {
           <h1 className="font-headline-lg text-headline-lg text-on-surface font-semibold">
             Application Settings
           </h1>
-          <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-surface-container text-primary-container font-mono">
+          <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-surface-container text-primary-container">
             SYS CONFIG
           </span>
         </div>
@@ -43,9 +44,12 @@ export const SettingsPage: React.FC = () => {
               Select interface rendering engine. Themes strictly configure syntax highlighting contrast and chromatic accenting.
             </p>
           </div>
-          <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-surface-container text-primary-container uppercase font-semibold">
-            Surface UI
-          </span>
+          <div className="flex items-center gap-3">
+            <ThemeToggle size="md" />
+            <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-surface-container text-primary-container uppercase font-semibold">
+              Surface UI
+            </span>
+          </div>
         </div>
 
         {/* Theme Cards Grid */}
@@ -76,18 +80,18 @@ export const SettingsPage: React.FC = () => {
                 </span>
               </div>
               <div className="font-code-sm text-code-sm text-primary-container font-semibold">
-                Graphite &amp; Lime Spark
+                Warm Near-Black &amp; Acid Green
               </div>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Graphite base (#23262F), surface containers (#1A1C21), and surgical Lime Spark (#B6FF2E) technical accents.
+                Near-black base (#0D0F0C), lifted containers (#121511 / #171B16), and surgical Acid Green (#A3E635 / #B6FF3C) technical accents.
               </p>
             </div>
 
             <div className="p-space-xs rounded bg-surface-container-lowest flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#111318]" />
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#23262F]" />
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#B6FF2E]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#0D0F0C]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#171B16]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#A3E635]" />
               </div>
               <span className="font-label-caps text-label-caps text-primary-container font-semibold">
                 ACTIVE DEFAULT
@@ -107,7 +111,7 @@ export const SettingsPage: React.FC = () => {
             <div className="space-y-space-sm">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-space-xs">
-                  <span className="w-3 h-3 rounded-full bg-[#064E3B]" />
+                  <span className="w-3 h-3 rounded-full bg-[#046C4E]" />
                   <span className="font-headline-sm text-body-sm font-semibold text-on-surface">
                     Light Mode
                   </span>
@@ -120,19 +124,19 @@ export const SettingsPage: React.FC = () => {
                   {theme === 'light' ? 'check_circle' : 'radio_button_unchecked'}
                 </span>
               </div>
-              <div className="font-code-sm text-code-sm text-[#064E3B] font-semibold">
-                Champagne &amp; Emerald
+              <div className="font-code-sm text-code-sm text-[#046C4E] font-semibold">
+                Champagne White &amp; Deep Emerald
               </div>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
-                Champagne paper base (#F8E7C9), calibrated warm cream surfaces, and dense Emerald Ink (#064E3B) tokens.
+                Warm champagne base (#F7F3E9), calibrated cream surfaces (#FAF6EE / #F2ECE0), and deep Emerald Ink (#046C4E) tokens.
               </p>
             </div>
 
             <div className="p-space-xs rounded bg-surface-container-lowest flex items-center justify-between">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#F8E7C9]" />
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#E8D7B9]" />
-                <span className="w-2.5 h-2.5 rounded-sm bg-[#064E3B]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#F7F3E9]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#FAF6EE]" />
+                <span className="w-2.5 h-2.5 rounded-sm bg-[#046C4E]" />
               </div>
               <span className="font-label-caps text-label-caps text-on-surface-variant font-medium">
                 LIGHT CONSOLE
@@ -217,41 +221,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Section 2: Graph Engine Parameters */}
-      <section className="bg-surface-container-low rounded-xl p-space-lg border border-surface-container-high shadow-sm space-y-space-md">
-        <div className="flex items-center gap-space-xs">
-          <span className="material-symbols-outlined text-primary-container text-[20px]">
-            account_tree
-          </span>
-          <h2 className="font-headline-md text-headline-md text-on-surface font-semibold">
-            Topological Graph Engine
-          </h2>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-space-md text-body-sm">
-          <div className="p-space-md rounded-lg bg-surface-container space-y-2">
-            <div className="font-medium text-on-surface">Max Ripple Hop Traversal</div>
-            <p className="text-xs text-outline">
-              Limits recursive breadth-first search across downstream AST symbols.
-            </p>
-            <div className="flex items-center gap-4 pt-1">
-              <input type="range" min="1" max="6" defaultValue="4" className="flex-1 accent-primary-container" />
-              <span className="font-code text-xs font-bold text-primary-container">4 hops</span>
-            </div>
-          </div>
-
-          <div className="p-space-md rounded-lg bg-surface-container space-y-2">
-            <div className="font-medium text-on-surface">Cycle Detection Sensitivity</div>
-            <p className="text-xs text-outline">
-              Tarjan SCC algorithm depth threshold for circular imports.
-            </p>
-            <div className="flex items-center gap-4 pt-1">
-              <input type="range" min="10" max="100" defaultValue="50" className="flex-1 accent-secondary" />
-              <span className="font-code text-xs font-bold text-secondary">Strict L3</span>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* Section 3: Danger Zone */}
       <section className="bg-surface-container-low rounded-xl p-space-lg border border-error/30 shadow-sm space-y-space-md">

@@ -9,9 +9,6 @@ import {
   GraphLink,
   TestingRecommendation,
   FileTreeNode,
-  VulnerabilitiesData,
-  CycloneDXBOM,
-  SbomSummaryData,
 } from '../types';
 
 export const MOCK_REPOSITORIES: Repository[] = [
@@ -195,7 +192,6 @@ export const MOCK_ISSUES: IssueItem[] = [
     id: 'ISSUE-2041',
     title: 'Potential Command Injection via Unsanitized Input',
     cwe: 'CWE-78',
-    cve: 'CVE-2024-3812',
     severity: 'Critical',
     category: 'Security',
     filePath: 'services/auth_service.py',
@@ -248,7 +244,6 @@ class TokenManager:
     id: 'ISSUE-1405',
     title: 'Hardcoded JWT Fallback Secret Key',
     cwe: 'CWE-798',
-    cve: 'CVE-2023-4419',
     severity: 'Critical',
     category: 'Security',
     filePath: 'config/security.py',
@@ -476,190 +471,3 @@ export const MOCK_FILE_TREE: FileTreeNode[] = [
     ]
   }
 ];
-
-export const MOCK_VULNERABILITIES: VulnerabilitiesData = {
-  packages_scanned: 6,
-  vulnerable_packages: [
-    {
-      package_name: 'axios',
-      version: '0.21.1',
-      ecosystem: 'npm',
-      vulnerabilities: [
-        {
-          id: 'GHSA-42xw-2xvc-qx8m',
-          summary: 'axios vulnerable to Server-Side Request Forgery (SSRF)',
-          severity: 'HIGH',
-          fixed_versions: ['0.21.2'],
-          references: ['https://github.com/advisories/GHSA-42xw-2xvc-qx8m'],
-        },
-      ],
-      affected_files: [
-        'src/services/paymentService.js',
-        'src/services/notificationService.js',
-        'src/controllers/checkoutController.js',
-      ],
-    },
-    {
-      package_name: 'lodash',
-      version: '4.17.15',
-      ecosystem: 'npm',
-      vulnerabilities: [
-        {
-          id: 'GHSA-35jh-r3h4-6jhm',
-          summary: 'Lodash prototype pollution via zip function',
-          severity: 'MEDIUM',
-          fixed_versions: ['4.17.21'],
-          references: ['https://github.com/advisories/GHSA-35jh-r3h4-6jhm'],
-        },
-      ],
-      affected_files: [
-        'src/utils/crypto.js',
-        'src/models/Payment.js',
-      ],
-    },
-  ],
-  total_vulnerabilities: 2,
-  osv_available: true,
-};
-
-export const MOCK_SBOM: CycloneDXBOM = {
-  bomFormat: 'CycloneDX',
-  specVersion: '1.5',
-  serialNumber: 'urn:uuid:545b844d-271b-566a-be6a-71a00c89c96c',
-  version: 1,
-  metadata: {
-    timestamp: '2025-01-15T10:00:00Z',
-    tools: [{ vendor: 'RepoLens', name: 'RepoLens SBOM Engine', version: '1.0.0' }],
-    component: {
-      type: 'application',
-      name: 'repolens-demo',
-      version: '1.0.0',
-      description: 'PayPal / paymentService.js demonstration codebase',
-    },
-  },
-  components: [
-    {
-      type: 'library',
-      name: 'axios',
-      version: '0.21.1',
-      bom_ref: 'pkg:npm/axios@0.21.1',
-      purl: 'pkg:npm/axios@0.21.1',
-      scope: 'required',
-      ecosystem: 'npm',
-      direct: true,
-      description: 'Promise based HTTP client for node.js and browser',
-      affected_files: [
-        'src/services/paymentService.js',
-        'src/services/notificationService.js',
-        'src/controllers/checkoutController.js',
-      ],
-      vulnerabilities_count: 1,
-    },
-    {
-      type: 'library',
-      name: 'lodash',
-      version: '4.17.15',
-      bom_ref: 'pkg:npm/lodash@4.17.15',
-      purl: 'pkg:npm/lodash@4.17.15',
-      scope: 'required',
-      ecosystem: 'npm',
-      direct: true,
-      description: 'Lodash modular utilities',
-      affected_files: [
-        'src/utils/crypto.js',
-        'src/models/Payment.js',
-      ],
-      vulnerabilities_count: 1,
-    },
-    {
-      type: 'library',
-      name: 'express',
-      version: '4.18.2',
-      bom_ref: 'pkg:npm/express@4.18.2',
-      purl: 'pkg:npm/express@4.18.2',
-      scope: 'required',
-      ecosystem: 'npm',
-      direct: true,
-      description: 'Fast, unopinionated, minimalist web framework for node',
-      affected_files: [
-        'index.js',
-        'src/controllers/paymentController.js',
-        'src/controllers/checkoutController.js',
-        'src/controllers/adminController.js',
-      ],
-      vulnerabilities_count: 0,
-    },
-    {
-      type: 'library',
-      name: 'jsonwebtoken',
-      version: '9.0.2',
-      bom_ref: 'pkg:npm/jsonwebtoken@9.0.2',
-      purl: 'pkg:npm/jsonwebtoken@9.0.2',
-      scope: 'required',
-      ecosystem: 'npm',
-      direct: true,
-      description: 'JSON Web Token implementation (symmetric and asymmetric)',
-      affected_files: ['src/middleware/auth.js'],
-      vulnerabilities_count: 0,
-    },
-    {
-      type: 'library',
-      name: 'body-parser',
-      version: '1.20.2',
-      bom_ref: 'pkg:npm/body-parser@1.20.2',
-      purl: 'pkg:npm/body-parser@1.20.2',
-      scope: 'optional',
-      ecosystem: 'npm',
-      direct: false,
-      description: 'Node.js body parsing middleware',
-      affected_files: [],
-      vulnerabilities_count: 0,
-    },
-    {
-      type: 'library',
-      name: 'debug',
-      version: '4.3.4',
-      bom_ref: 'pkg:npm/debug@4.3.4',
-      purl: 'pkg:npm/debug@4.3.4',
-      scope: 'optional',
-      ecosystem: 'npm',
-      direct: false,
-      description: 'Small debugging utility',
-      affected_files: [],
-      vulnerabilities_count: 0,
-    },
-  ],
-  dependencies: [
-    {
-      ref: 'pkg:application/repolens-demo@1.0.0',
-      dependsOn: [
-        'pkg:npm/axios@0.21.1',
-        'pkg:npm/lodash@4.17.15',
-        'pkg:npm/express@4.18.2',
-        'pkg:npm/jsonwebtoken@9.0.2',
-      ],
-    },
-    {
-      ref: 'pkg:npm/express@4.18.2',
-      dependsOn: [
-        'pkg:npm/body-parser@1.20.2',
-        'pkg:npm/debug@4.3.4',
-      ],
-    },
-  ],
-};
-
-export const MOCK_SBOM_SUMMARY: SbomSummaryData = {
-  format: 'CycloneDX',
-  spec_version: '1.5',
-  serial_number: 'urn:uuid:545b844d-271b-566a-be6a-71a00c89c96c',
-  component_count: 6,
-  direct_count: 4,
-  transitive_count: 2,
-  vulnerable_components_count: 2,
-  ecosystems: ['npm'],
-  components: MOCK_SBOM.components,
-  raw_sbom: MOCK_SBOM,
-};
-
-

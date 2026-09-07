@@ -1,43 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, startTransition } from 'react';
 import { Repository, ThemeMode } from '../types';
-import { repoService, clearAuthToken, setAuthToken } from '../services/api';
+import { repoService } from '../services/api';
 import { MOCK_REPOSITORIES } from '../services/mockData';
 import { AppContext, UserProfile } from './appContextDefinition';
-import { supabase } from '../services/supabaseClient';
+import { triggerParticleThemeTransition } from '../utils/particleThemeTransition';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUserState] = useState<UserProfile | null>(() => {
-    try {
-      const saved = localStorage.getItem('repolens_user_profile');
-      if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-    return null;
-  });
-
-  const setUser = (newUser: UserProfile | null) => {
-    setUserState(newUser);
-    if (newUser) {
-      localStorage.setItem('repolens_user_profile', JSON.stringify(newUser));
-    } else {
-      localStorage.removeItem('repolens_user_profile');
-    }
-  };
-
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore
-    }
-    clearAuthToken();
-    setUser(null);
-    setRepositories([MOCK_REPOSITORIES[0]]);
-    setActiveRepoId('repolens-demo');
-    window.location.href = '/login';
-  };
-
   const [repositories, setRepositories] = useState<Repository[]>(() => MOCK_REPOSITORIES);
   const [activeRepoId, setActiveRepoId] = useState<string>('repolens-demo');
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -50,72 +18,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  const refreshRepositories = async () => {
-    try {
-      const list = await repoService.getRepositories();
-      if (list && list.length > 0) {
-        setRepositories(list);
+  const [user, setUser] = useState<UserProfile | null>(() => {
+    const saved = localStorage.getItem('repolens_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
       }
-    } catch (e) {
-      console.warn('Could not fetch repositories from backend:', e);
     }
+    return null;
+  });
+
+  const login = (email?: string, name?: string) => {
+    const u: UserProfile = {
+      email: email || 'developer@repolens.io',
+      name: name || (email ? email.split('@')[0] : 'Developer'),
+    };
+    setUser(u);
+    localStorage.setItem('repolens_user', JSON.stringify(u));
   };
 
-  // Sync Supabase Auth Session on mount and on auth state change
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session && session.user) {
-        setAuthToken(session.access_token);
-        const email = session.user.email || '';
-        const displayName =
-          session.user.user_metadata?.display_name ||
-          session.user.user_metadata?.full_name ||
-          email.split('@')[0] ||
-          'Developer';
-        const provider = session.user.app_metadata?.provider || 'email';
+  const logout = () => {
+    setUser(null);
+    localStorage.removeItem('repolens_user');
+  };
 
-        setUser({ email, displayName, provider });
-        refreshRepositories();
-      }
-    });
+  const isAuthenticated = !!user;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session && session.user) {
-        setAuthToken(session.access_token);
-        const email = session.user.email || '';
-        const displayName =
-          session.user.user_metadata?.display_name ||
-          session.user.user_metadata?.full_name ||
-          email.split('@')[0] ||
-          'Developer';
-        const provider = session.user.app_metadata?.provider || 'email';
-
-        setUser({ email, displayName, provider });
-        refreshRepositories();
-      } else if (_event === 'SIGNED_OUT') {
-        clearAuthToken();
-        setUser(null);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+  const refreshRepositories = async () => {
+    const list = await repoService.getRepositories();
+    setRepositories(list);
+  };
 
   const activeRepo = repositories.find((r) => r.id === activeRepoId) || repositories[0];
 
-  const setTheme = (newTheme: ThemeMode) => {
-    setThemeState(newTheme);
-    localStorage.setItem('repolens_theme', newTheme);
+  const setTheme = (newTheme: ThemeMode, event?: { clientX: number; clientY: number }) => {
+    if (newTheme === theme) return;
+    const target = newTheme === 'system'
+      ? (typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+      : newTheme;
+
+    if (target === theme) {
+      startTransition(() => {
+        setThemeState(newTheme);
+        localStorage.setItem('repolens_theme', newTheme);
+      });
+      return;
+    }
+
+    const originX = event?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth / 2 : 0);
+    const originY = event?.clientY ?? (typeof window !== 'undefined' ? window.innerHeight / 2 : 0);
+
+    triggerParticleThemeTransition(originX, originY, target, () => {
+      startTransition(() => {
+        setThemeState(newTheme);
+        localStorage.setItem('repolens_theme', newTheme);
+      });
+    });
   };
 
-  const toggleTheme = () => {
+  const toggleTheme = (event?: React.MouseEvent | { clientX: number; clientY: number }) => {
     const next = theme === 'dark' ? 'light' : 'dark';
-    setTheme(next);
+    const originX = event?.clientX ?? (typeof window !== 'undefined' ? window.innerWidth - 60 : 0);
+    const originY = event?.clientY ?? 32;
+
+    triggerParticleThemeTransition(originX, originY, next, () => {
+      startTransition(() => {
+        setThemeState(next);
+        localStorage.setItem('repolens_theme', next);
+      });
+    });
   };
 
   const setDiffGlowEnabled = (val: boolean) => {
@@ -162,9 +135,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
-        user,
-        setUser,
-        signOut,
         activeRepoId,
         setActiveRepoId,
         activeRepo,
@@ -179,6 +149,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsCommandPaletteOpen,
         sidebarCollapsed,
         setSidebarCollapsed,
+        user,
+        setUser,
+        isAuthenticated,
+        login,
+        logout,
       }}
     >
       {children}

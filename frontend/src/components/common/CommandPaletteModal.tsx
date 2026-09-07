@@ -24,7 +24,7 @@ export const CommandPaletteModal: React.FC = () => {
   const items = [
     { type: 'Page', title: 'Workspace Overview', icon: 'dashboard', action: () => navigate('/') },
     { type: 'Page', title: 'Repository Inventory', icon: 'folder_data', action: () => navigate('/repositories') },
-    { type: 'Page', title: 'Connect New Repository', icon: 'add_link', action: () => navigate('/repositories/connect') },
+    { type: 'Page', title: 'Connect New Repository', icon: 'add_link', action: () => navigate('/ingest') },
     { type: 'Page', title: 'Pipeline Telemetry', icon: 'terminal', action: () => navigate('/progress') },
     { type: 'Page', title: 'Architecture Topology', icon: 'hub', action: () => navigate('/architecture') },
     { type: 'Page', title: 'Security Analysis (3 Vulnerabilities)', icon: 'security', action: () => navigate('/security') },

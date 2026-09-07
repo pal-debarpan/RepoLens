@@ -37,9 +37,6 @@ export const RepositoriesPage: React.FC = () => {
             <h1 className="font-headline-lg text-headline-lg text-on-surface font-semibold">
               Repositories
             </h1>
-            <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-surface-container text-primary-container font-mono">
-              FLEET INVENTORY
-            </span>
           </div>
           <p className="font-body-md text-body-md text-on-surface-variant mt-1">
             Active codebase telemetry, topological AST resolution, and structural integrity monitoring.
@@ -116,9 +113,9 @@ export const RepositoriesPage: React.FC = () => {
 
         {/* Table Body Rows */}
         <div className="divide-y divide-surface-container-high">
-          {filteredRepos.map((repo) => (
+          {filteredRepos.map((repo, idx) => (
             <div
-              key={repo.id}
+              key={`${repo.id}-${idx}`}
               className="group grid grid-cols-12 gap-space-sm px-space-lg py-space-md bg-surface-container-low hover:bg-surface-container items-center transition-colors relative cursor-pointer"
               onClick={() => handleSelectRepo(repo.id)}
             >
