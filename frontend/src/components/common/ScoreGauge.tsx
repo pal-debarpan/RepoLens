@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface ScoreGaugeProps {
-  score: number;
+  score: number | null;
   size?: 'sm' | 'md' | 'lg';
   showLabel?: boolean;
 }
@@ -37,18 +37,18 @@ export const ScoreGauge: React.FC<ScoreGaugeProps> = ({
           strokeWidth={strokeWidth}
         />
         <path
-          className={getStrokeColor(score)}
+          className={score === null ? 'text-outline' : getStrokeColor(score)}
           d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
           fill="none"
           stroke="currentColor"
-          strokeDasharray={`${score}, 100`}
+          strokeDasharray={`${score ?? 0}, 100`}
           strokeLinecap="round"
           strokeWidth={strokeWidth}
         />
       </svg>
       {showLabel && (
         <span className="absolute font-code font-bold text-on-surface">
-          {score}
+          {score ?? '—'}
         </span>
       )}
     </div>

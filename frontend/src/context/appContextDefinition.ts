@@ -1,13 +1,7 @@
 import { createContext } from 'react';
-import { Repository, ThemeMode } from '../types';
+import { Repository, ThemeMode, UserProfile } from '../types';
 
-export interface UserProfile {
-  email: string;
-  name?: string;
-}
-
-export interface AppContextType {
-  activeRepoId: string;
+export interface AppContextType {  activeRepoId: string;
   setActiveRepoId: (id: string) => void;
   activeRepo: Repository | undefined;
   repositories: Repository[];
@@ -21,11 +15,19 @@ export interface AppContextType {
   setIsCommandPaletteOpen: (open: boolean) => void;
   sidebarCollapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
+
+  // New backend-aligned state
+  accessToken: string | null;
+  currentAnalysisId: string | null;
+  setCurrentAnalysisId: (id: string | null) => void;
+  currentRepositoryId: string | null;
+  setCurrentRepositoryId: (id: string | null) => void;
+
   user: UserProfile | null;
   setUser: (user: UserProfile | null) => void;
   isAuthenticated: boolean;
   login: (email?: string, name?: string) => void;
+  signup: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
 }
-
 export const AppContext = createContext<AppContextType | undefined>(undefined);

@@ -1,29 +1,27 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { repoService } from '../services/api';
+import * as repoService from '../services/repositoryService';
+import * as analysisService from '../services/analysisService';
 
 export const IngestRepoPage: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshRepositories, setActiveRepoId } = useApp();
+  const { refreshRepositories, setActiveRepoId, setCurrentAnalysisId } = useApp();
 
   const [selectedMethod, setSelectedMethod] = useState<'url' | 'zip'>('url');
 
   // URL Tab State
   const [gitHost, setGitHost] = useState<'github' | 'gitlab' | 'bitbucket' | 'custom'>('github');
-  const [repoUrl, setRepoUrl] = useState('https://github.com/repolens-org/payments-core.git');
-  const [repoName, setRepoName] = useState('payments-core');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoName, setRepoName] = useState('');
   const [branch, setBranch] = useState('main');
-  const [token, setToken] = useState('ghp_920f8ab73ce184209fa29c');
+  const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState(false);
 
   // ZIP Tab State
   const [dragActive, setDragActive] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>({
-    name: 'analytics-worker-v2.1.zip',
-    size: '14.2 MB',
-  });
-  const [zipRepoAlias, setZipRepoAlias] = useState('analytics-worker');
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null);
+  const [zipRepoAlias, setZipRepoAlias] = useState('');
   const [zipBranch, setZipBranch] = useState('main');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -79,17 +77,43 @@ export const IngestRepoPage: React.FC = () => {
     const name = isUrl ? repoName || 'new-repo' : zipRepoAlias || 'uploaded-archive';
     const targetBranch = isUrl ? branch : zipBranch;
 
-    const created = await repoService.createRepository({
-      name,
-      branch: targetBranch || 'main',
-      language: isUrl ? 'TypeScript / Node' : 'Python 3.11',
-      framework: isUrl ? 'FastAPI / NestJS' : 'Flask / Celery',
-      scanDepth: depth === 'l3' ? 'L3 AST' : depth === 'l4' ? 'Full Monorepo' : 'L1 Static',
-    });
-
-    await refreshRepositories();
-    setActiveRepoId(created.id);
-    navigate('/progress');
+    try {
+      if (isUrl) {
+        const payload: any = { url: repoUrl };
+        if (token) payload.pat = token;
+        const created = await repoService.ingestGitHub(payload);
+        // Trigger analysis pipeline immediately
+        try {
+          const analysis = await analysisService.createAnalysis({ repository_id: created.id });
+          setCurrentAnalysisId(analysis.id);
+        } catch (analysisErr) {
+          console.warn('Could not auto-start analysis:', analysisErr);
+        }
+        await refreshRepositories();
+        setActiveRepoId(created.id);
+        navigate('/progress');
+      } else {
+        if (!fileInputRef.current?.files?.[0]) {
+          setIsSubmitting(false);
+          return;
+        }
+        const file = fileInputRef.current.files[0];
+        const created = await repoService.ingestZip(file);
+        // Trigger analysis pipeline immediately
+        try {
+          const analysis = await analysisService.createAnalysis({ repository_id: created.id });
+          setCurrentAnalysisId(analysis.id);
+        } catch (analysisErr) {
+          console.warn('Could not auto-start analysis:', analysisErr);
+        }
+        await refreshRepositories();
+        setActiveRepoId(created.id);
+        navigate('/progress');
+      }
+    } catch (err: any) {
+      console.error('Ingestion failed:', err);
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -273,20 +297,6 @@ export const IngestRepoPage: React.FC = () => {
                   <label className="font-sans text-xs font-medium text-on-surface">
                     Git Clone URL (HTTPS or SSH)
                   </label>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedMethod('url');
-                      setRepoUrl('https://github.com/repolens-org/payments-core.git');
-                      setRepoName('payments-core');
-                      setGitHost('github');
-                    }}
-                    className="text-[11px] font-sans text-primary-container hover:underline flex items-center gap-1 transition-colors"
-                  >
-                    <span className="material-symbols-outlined text-[13px]">auto_fix_high</span>
-                    <span>Fill Demo Repo</span>
-                  </button>
                 </div>
                 <div className="relative flex items-center">
                   <span className="absolute left-3.5 text-outline pointer-events-none material-symbols-outlined text-[18px]">

@@ -1,125 +1,162 @@
-import {
-  MOCK_REPOSITORIES,
-  MOCK_PIPELINE_STAGES,
-  MOCK_PIPELINE_LOGS,
-  MOCK_DEPENDENCIES,
-  MOCK_ISSUES,
-  MOCK_BLAST_TARGETS,
-  MOCK_ARCHITECTURE_NODES,
-  MOCK_ARCHITECTURE_LINKS,
-  MOCK_TESTING_RECOMMENDATIONS,
-  MOCK_FILE_TREE,
-} from './mockData';
-import {
-  Repository,
-  PipelineStage,
-  PipelineLog,
-  DependencyItem,
-  IssueItem,
-  BlastRadiusTarget,
-  GraphNode,
-  GraphLink,
-  TestingRecommendation,
-  FileTreeNode,
-} from '../types';
+/**
+ * RepoLens Centralized API Client
+ *
+ * All backend communication goes through this module.
+ * - Base URL from VITE_API_URL environment variable
+ * - Automatic Authorization: Bearer <token> injection
+ * - Structured error handling for all HTTP status codes
+ * - Type-safe response parsing
+ */
 
-export const repoService = {
-  getRepositories: async (): Promise<Repository[]> => {
-    return Promise.resolve([...MOCK_REPOSITORIES]);
-  },
-  getRepositoryById: async (id: string): Promise<Repository | undefined> => {
-    return Promise.resolve(MOCK_REPOSITORIES.find((r) => r.id === id));
-  },
-  createRepository: async (newRepo: Partial<Repository>): Promise<Repository> => {
-    const baseId = newRepo.name?.toLowerCase().replace(/\s+/g, '-') || `repo-${Date.now()}`;
-    const idExists = MOCK_REPOSITORIES.some((r) => r.id === baseId);
-    const uniqueId = idExists ? `${baseId}-${Date.now().toString().slice(-4)}` : baseId;
-    const created: Repository = {
-      id: uniqueId,
-      name: newRepo.name || 'new-repository',
-      isPrivate: newRepo.isPrivate ?? true,
-      branch: newRepo.branch || 'main',
-      commitHash: 'a1b2c3d',
-      commitMessage: 'Initial scan setup',
-      language: newRepo.language || 'Python 3.11',
-      framework: newRepo.framework || 'FastAPI',
-      lastAnalyzed: 'Just now',
-      scanDepth: newRepo.scanDepth || 'L3 AST',
-      score: 82,
-      riskLevel: 'Moderate Risk',
-      blastVectorsCount: 5,
-      circularLeaksCount: 0,
-      status: 'Active',
-      loc: 5400,
-      filesCount: 42,
-      dependenciesCount: 16,
-      openIssuesCount: 1,
-      testCoverage: 78.0,
-      ...newRepo,
-    };
-    MOCK_REPOSITORIES.unshift(created);
-    return Promise.resolve(created);
-  },
-};
+const API_BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:8000').replace(/\/$/, '');
 
-export const pipelineService = {
-  getStages: async (_repoId?: string): Promise<PipelineStage[]> => {
-    return Promise.resolve([...MOCK_PIPELINE_STAGES]);
-  },
-  getLogs: async (_repoId?: string): Promise<PipelineLog[]> => {
-    return Promise.resolve([...MOCK_PIPELINE_LOGS]);
-  },
-};
+// ─── Token Storage ────────────────────────────────────────────────────────────
 
-export const dependencyService = {
-  getDependencies: async (_repoId?: string): Promise<DependencyItem[]> => {
-    return Promise.resolve([...MOCK_DEPENDENCIES]);
-  },
-};
+const TOKEN_KEY = 'repolens_access_token';
 
-export const issueService = {
-  getIssues: async (_repoId?: string): Promise<IssueItem[]> => {
-    return Promise.resolve([...MOCK_ISSUES]);
-  },
-  getIssueById: async (issueId: string): Promise<IssueItem | undefined> => {
-    return Promise.resolve(MOCK_ISSUES.find((i) => i.id === issueId));
-  },
-  resolveIssue: async (issueId: string): Promise<boolean> => {
-    const issue = MOCK_ISSUES.find((i) => i.id === issueId);
-    if (issue) {
-      issue.status = 'Resolved';
-      return Promise.resolve(true);
+export function getStoredToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredToken(token: string): void {
+  try {
+    localStorage.setItem(TOKEN_KEY, token);
+  } catch {
+    // ignore (private browsing)
+  }
+}
+
+export function clearStoredToken(): void {
+  try {
+    localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // ignore
+  }
+}
+
+// ─── API Error ────────────────────────────────────────────────────────────────
+
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly detail: string,
+    public readonly raw?: unknown,
+  ) {
+    super(detail);
+    this.name = 'ApiError';
+  }
+}
+
+function toHumanError(status: number, detail: string): string {
+  if (status === 400) return detail || 'Invalid request.';
+  if (status === 401) return 'Authentication required. Please sign in again.';
+  if (status === 403) return 'You do not have permission to access this resource.';
+  if (status === 404) return detail || 'Resource not found.';
+  if (status === 409) return detail || 'Conflict — this resource already exists.';
+  if (status === 413) return detail || 'Repository is too large to process.';
+  if (status === 422) return detail || 'Invalid input data.';
+  if (status === 429) return 'Too many requests. Please wait a moment and try again.';
+  if (status === 500) return 'Internal server error. Please try again.';
+  if (status === 502) return 'Authentication service is temporarily unreachable.';
+  if (status === 503) return 'Service is temporarily unavailable.';
+  if (status === 0) return 'Network error — is the backend server running?';
+  return detail || `Unexpected error (${status})`;
+}
+
+// ─── Core Fetch Wrapper ───────────────────────────────────────────────────────
+
+interface FetchOptions {
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  body?: unknown;
+  headers?: Record<string, string>;
+  /** Set to true to skip auth header (e.g. login/signup) */
+  noAuth?: boolean;
+  /** Set to true for multipart/form-data (do not set Content-Type) */
+  multipart?: boolean;
+  /** Raw FormData for file uploads */
+  formData?: FormData;
+}
+
+async function request<T>(path: string, opts: FetchOptions = {}): Promise<T> {
+  const { method = 'GET', body, headers = {}, noAuth = false, multipart = false, formData } = opts;
+
+  const reqHeaders: Record<string, string> = { ...headers };
+
+  if (!multipart && !formData) {
+    reqHeaders['Content-Type'] = 'application/json';
+    reqHeaders['Accept'] = 'application/json';
+  }
+
+  if (!noAuth) {
+    const token = getStoredToken();
+    if (token) {
+      reqHeaders['Authorization'] = `Bearer ${token}`;
     }
-    return Promise.resolve(false);
-  },
-};
+  }
 
-export const blastRadiusService = {
-  getTargets: async (_repoId?: string): Promise<BlastRadiusTarget[]> => {
-    return Promise.resolve([...MOCK_BLAST_TARGETS]);
-  },
-  getTargetById: async (targetId: string): Promise<BlastRadiusTarget | undefined> => {
-    return Promise.resolve(MOCK_BLAST_TARGETS.find((t) => t.id === targetId || t.symbol === targetId));
-  },
-};
+  let fetchBody: BodyInit | undefined;
+  if (formData) {
+    fetchBody = formData;
+  } else if (body !== undefined) {
+    fetchBody = JSON.stringify(body);
+  }
 
-export const architectureService = {
-  getGraph: async (_repoId?: string): Promise<{ nodes: GraphNode[]; links: GraphLink[] }> => {
-    return Promise.resolve({
-      nodes: [...MOCK_ARCHITECTURE_NODES],
-      links: [...MOCK_ARCHITECTURE_LINKS],
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers: reqHeaders,
+      body: fetchBody,
     });
-  },
+  } catch (networkErr) {
+    throw new ApiError(0, 'Network error — is the backend server running?', networkErr);
+  }
+
+  // 204 No Content
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
+  let data: unknown;
+  const ct = response.headers.get('content-type') ?? '';
+  if (ct.includes('application/json')) {
+    data = await response.json().catch(() => ({}));
+  } else {
+    data = await response.text().catch(() => '');
+  }
+
+  if (!response.ok) {
+    const detail =
+      (data as { detail?: string })?.detail ??
+      (typeof data === 'string' ? data : '') ??
+      '';
+    const human = toHumanError(response.status, detail);
+    throw new ApiError(response.status, human, data);
+  }
+
+  return data as T;
+}
+
+// ─── Exported Helpers ─────────────────────────────────────────────────────────
+
+export const api = {
+  get: <T>(path: string, opts?: Omit<FetchOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'GET' }),
+
+  post: <T>(path: string, body?: unknown, opts?: Omit<FetchOptions, 'method'>) =>
+    request<T>(path, { ...opts, method: 'POST', body }),
+
+  postForm: <T>(path: string, formData: FormData) =>
+    request<T>(path, { method: 'POST', formData, multipart: true }),
+
+  patch: <T>(path: string, body?: unknown, opts?: Omit<FetchOptions, 'method'>) =>
+    request<T>(path, { ...opts, method: 'PATCH', body }),
+
+  delete: <T>(path: string, opts?: Omit<FetchOptions, 'method' | 'body'>) =>
+    request<T>(path, { ...opts, method: 'DELETE' }),
 };
 
-export const testingService = {
-  getRecommendations: async (_repoId?: string): Promise<TestingRecommendation[]> => {
-    return Promise.resolve([...MOCK_TESTING_RECOMMENDATIONS]);
-  },
-};
-
-export const explorerService = {
-  getFileTree: async (_repoId?: string): Promise<FileTreeNode[]> => {
-    return Promise.resolve([...MOCK_FILE_TREE]);
-  },
-};

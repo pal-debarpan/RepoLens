@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { pipelineService } from '../services/api';
 import { PipelineStage, PipelineLog } from '../types';
+import * as analysisService from '../services/analysisService';
 
 export const PipelineTelemetryPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { activeRepo, currentAnalysisId } = useApp();
   const navigate = useNavigate();
 
   const [stages, setStages] = useState<PipelineStage[]>([]);
@@ -14,9 +14,72 @@ export const PipelineTelemetryPage: React.FC = () => {
   const [logSearch, setLogSearch] = useState<string>('');
 
   useEffect(() => {
-    pipelineService.getStages().then(setStages);
-    pipelineService.getLogs().then(setLogs);
-  }, []);
+    if (!currentAnalysisId) {
+      setStages([
+        { id: '1', name: 'AST Parsing', status: 'pending', progress: 0 },
+        { id: '2', name: 'Dependency Graph', status: 'pending', progress: 0 },
+        { id: '3', name: 'Security Scanning', status: 'pending', progress: 0 },
+        { id: '4', name: 'Quality Assessment', status: 'pending', progress: 0 },
+      ]);
+      return;
+    }
+
+    const cancelPoll = analysisService.pollAnalysis(
+      currentAnalysisId,
+      (analysis) => {
+        let s: PipelineStage[] = [];
+        let newLog: PipelineLog | null = null;
+
+        if (analysis.status === 'PENDING') {
+          s = [
+            { id: '1', name: 'AST Parsing', status: 'running', progress: 10, detail: 'Starting...' },
+            { id: '2', name: 'Dependency Graph', status: 'pending', progress: 0 },
+            { id: '3', name: 'Security Scanning', status: 'pending', progress: 0 },
+            { id: '4', name: 'Quality Assessment', status: 'pending', progress: 0 },
+          ];
+          newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'info', stage: 'Init', message: 'Analysis pending...' };
+        } else if (analysis.status === 'RUNNING') {
+          s = [
+            { id: '1', name: 'AST Parsing', status: 'completed', progress: 100, detail: 'Done' },
+            { id: '2', name: 'Dependency Graph', status: 'completed', progress: 100, detail: 'Done' },
+            { id: '3', name: 'Security Scanning', status: 'running', progress: 50, detail: 'Scanning...' },
+            { id: '4', name: 'Quality Assessment', status: 'pending', progress: 0 },
+          ];
+          newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'info', stage: 'Security', message: 'Scanning for vulnerabilities...' };
+        } else if (analysis.status === 'COMPLETED') {
+          s = [
+            { id: '1', name: 'AST Parsing', status: 'completed', progress: 100, detail: 'Done' },
+            { id: '2', name: 'Dependency Graph', status: 'completed', progress: 100, detail: 'Done' },
+            { id: '3', name: 'Security Scanning', status: 'completed', progress: 100, detail: 'Done' },
+            { id: '4', name: 'Quality Assessment', status: 'completed', progress: 100, detail: 'Done' },
+          ];
+          newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'success', stage: 'Done', message: 'Analysis completed successfully' };
+        } else if (analysis.status === 'FAILED') {
+          s = [
+            { id: '1', name: 'AST Parsing', status: 'completed', progress: 100 },
+            { id: '2', name: 'Dependency Graph', status: 'completed', progress: 100 },
+            { id: '3', name: 'Security Scanning', status: 'completed', progress: 100 },
+            { id: '4', name: 'Quality Assessment', status: 'failed', progress: 0 },
+          ];
+          newLog = { id: Date.now().toString(), timestamp: new Date().toLocaleTimeString(), level: 'error', stage: 'Error', message: analysis.error_message || 'Analysis failed' };
+        }
+
+        if (s.length > 0) setStages(s);
+        if (newLog) {
+          setLogs((prev) => {
+            if (prev.length === 0 || prev[prev.length - 1].message !== newLog!.message) {
+              return [...prev, newLog!];
+            }
+            return prev;
+          });
+        }
+      },
+      2000,
+    );
+
+    return cancelPoll;
+  }, [currentAnalysisId]);
+
 
   const filteredLogs = logs.filter((log) => {
     const matchesLevel = filterLevel === 'all' || log.level === filterLevel;

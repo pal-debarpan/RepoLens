@@ -35,20 +35,20 @@ export const OverviewPage: React.FC = () => {
       window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     if (prefersReducedMotion || hasAnimatedRef.current) {
-      setHealthScore(activeRepo?.score ?? 76);
-      setVulnCount(activeRepo?.openIssuesCount ?? 8);
-      setGraphCount(4210);
-      setCoverageScore(activeRepo?.testCoverage ?? 84.5);
+      setHealthScore(activeRepo?.score ?? 0);
+      setVulnCount(activeRepo?.openIssuesCount ?? 0);
+      setGraphCount(activeRepo?.filesCount ?? 0);
+      setCoverageScore(activeRepo?.testCoverage ?? 0);
       return;
     }
 
     hasAnimatedRef.current = true;
 
     // Sequence: Hero Fleet Health Ring & Number Count-up (100ms - 1300ms, ease-out)
-    const targetHealth = activeRepo?.score ?? 76;
-    const targetVulns = activeRepo?.openIssuesCount ?? 8;
-    const targetGraph = 4210;
-    const targetCoverage = activeRepo?.testCoverage ?? 84.5;
+    const targetHealth = activeRepo?.score ?? 0;
+    const targetVulns = activeRepo?.openIssuesCount ?? 0;
+    const targetGraph = activeRepo?.filesCount ?? 0;
+    const targetCoverage = activeRepo?.testCoverage ?? 0;
 
     const startTime = performance.now();
     const duration = 1200;
@@ -198,7 +198,7 @@ export const OverviewPage: React.FC = () => {
                     isDark ? 'text-[#fca5a5]' : 'text-[#b91c1c]'
                   }`}
                 >
-                  14 Active Blast Vectors in Critical Path
+                  {activeRepo?.blastVectorsCount || 0} Active Blast Vectors in Critical Path
                 </span>
                 <span
                   className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded tracking-wide uppercase ${
@@ -207,7 +207,7 @@ export const OverviewPage: React.FC = () => {
                       : 'bg-[#c53030]/15 text-[#991b1b] border border-[#c53030]/30'
                   }`}
                 >
-                  HIGH RIPPLE
+                  {activeRepo?.blastVectorsCount && activeRepo.blastVectorsCount > 5 ? 'HIGH RIPPLE' : 'LOW RIPPLE'}
                 </span>
               </div>
               <p
@@ -215,17 +215,7 @@ export const OverviewPage: React.FC = () => {
                   isDark ? 'text-[#A2ADA0]' : 'text-[#586252]'
                 }`}
               >
-                Refactoring{' '}
-                <code
-                  className={`font-mono px-1 py-0.5 rounded text-[11px] ${
-                    isDark
-                      ? 'bg-[#1E231D] text-[#E4E8E1]'
-                      : 'bg-[#E8E0D0] text-[#181D17]'
-                  }`}
-                >
-                  services/auth_service.py
-                </code>{' '}
-                cascades into 4 API endpoints and 7 test suites.
+                Topological changes cascade into downstream APIs and test suites. Review the blast radius before merging.
               </p>
             </div>
           </div>
@@ -309,7 +299,7 @@ export const OverviewPage: React.FC = () => {
                   isDark ? 'text-[#7D8878]' : 'text-[#6E7866]'
                 }`}
               >
-                3 monitored repositories synced
+                {repositories.length} monitored {repositories.length === 1 ? 'repository' : 'repositories'} synced
               </p>
             </div>
 

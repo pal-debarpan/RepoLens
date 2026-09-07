@@ -1,35 +1,39 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../context';
-import { repoService } from '../services/api';
+import * as repoService from '../services/repositoryService';
+import * as analysisService from '../services/analysisService';
 import { RepoLensLogo } from '../components/common/RepoLensLogo';
 
 export const StandaloneIngestPage: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshRepositories, setActiveRepoId } = useApp();
+  const { refreshRepositories, setActiveRepoId, setCurrentAnalysisId } = useApp();
 
   const [selectedMethod, setSelectedMethod] = useState<'url' | 'zip'>('url');
 
   // URL Tab State
-  const [repoUrl, setRepoUrl] = useState('https://github.com/repolens-org/payments-core.git');
-  const [repoName, setRepoName] = useState('payments-core');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoName, setRepoName] = useState('');
   const [branch, setBranch] = useState('main');
 
   // ZIP Tab State
   const [dragActive, setDragActive] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>({
-    name: 'analytics-worker-v2.1.zip',
-    size: '14.2 MB',
-  });
-  const [zipRepoAlias, setZipRepoAlias] = useState('analytics-worker');
+  const [uploadedFile, setUploadedFile] = useState<{ name: string; size: string } | null>(null);
+  const [zipRepoAlias, setZipRepoAlias] = useState('');
   const [zipBranch, setZipBranch] = useState('main');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Handle Drag & Drop
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    if (selectedMethod === 'url' && !repoUrl.trim()) {
+      setSubmitError('Enter a GitHub repository URL to begin analysis.');
+      return;
+    }
     e.stopPropagation();
     if (e.type === 'dragenter' || e.type === 'dragover') {
       setDragActive(true);
@@ -72,21 +76,42 @@ export const StandaloneIngestPage: React.FC = () => {
     setIsSubmitting(true);
 
     const isUrl = selectedMethod === 'url';
-    const name = isUrl ? repoName || 'new-repo' : zipRepoAlias || 'uploaded-archive';
-    const targetBranch = isUrl ? branch : zipBranch;
-
-    const created = await repoService.createRepository({
-      name,
-      branch: targetBranch || 'main',
-      language: isUrl ? 'TypeScript / Node' : 'Python 3.11',
-      framework: isUrl ? 'FastAPI / NestJS' : 'Flask / Celery',
-      scanDepth: 'Full Monorepo',
-    });
-
-    await refreshRepositories();
-    setActiveRepoId(created.id);
-    // Take the user to the main website / overview page with the other pages
-    navigate('/app');
+    try {
+      if (isUrl) {
+        const created = await repoService.ingestGitHub({ url: repoUrl });
+        // Trigger analysis pipeline immediately
+        try {
+          const analysis = await analysisService.createAnalysis({ repository_id: created.id });
+          setCurrentAnalysisId(analysis.id);
+        } catch (analysisErr) {
+          console.warn('Could not auto-start analysis:', analysisErr);
+        }
+        await refreshRepositories();
+        setActiveRepoId(created.id);
+        navigate('/progress');
+      } else {
+        if (!fileInputRef.current?.files?.[0]) {
+          setIsSubmitting(false);
+          return;
+        }
+        const file = fileInputRef.current.files[0];
+        const created = await repoService.ingestZip(file);
+        // Trigger analysis pipeline immediately
+        try {
+          const analysis = await analysisService.createAnalysis({ repository_id: created.id });
+          setCurrentAnalysisId(analysis.id);
+        } catch (analysisErr) {
+          console.warn('Could not auto-start analysis:', analysisErr);
+        }
+        await refreshRepositories();
+        setActiveRepoId(created.id);
+        navigate('/progress');
+      }
+    } catch (err: any) {
+      console.error('Ingestion failed:', err);
+      setSubmitError(err instanceof Error ? err.message : 'Repository ingestion failed.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -107,6 +132,7 @@ export const StandaloneIngestPage: React.FC = () => {
 
       {/* Main Container */}
       <main className="flex-1 max-w-4xl w-full mx-auto px-4 sm:px-6 py-8 sm:py-12 space-y-8">
+        {submitError && <div role="alert" className="rounded-xl border border-error/40 bg-error-container/20 px-4 py-3 text-sm text-error">{submitError}</div>}
         {/* Page Header */}
         <div>
           <h1 className="font-headline-lg text-2xl sm:text-3xl text-on-surface font-bold">

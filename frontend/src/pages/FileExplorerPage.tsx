@@ -1,25 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { explorerService } from '../services/api';
+import * as analysisService from '../services/analysisService';
 import { FileTreeNode } from '../types';
 
 export const FileExplorerPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { currentAnalysisId, activeRepo } = useApp();
   const navigate = useNavigate();
 
   const [fileTree, setFileTree] = useState<FileTreeNode[]>([]);
+  const [totalFiles, setTotalFiles] = useState(0);
   const [search, setSearch] = useState('');
-  const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({
-    'dir-services': true,
-    'dir-core': true,
-    'dir-api': true,
-    'dir-config': true,
-  });
+  const [expandedDirs, setExpandedDirs] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    explorerService.getFileTree(activeRepo?.id).then(setFileTree);
-  }, [activeRepo]);
+    if (!currentAnalysisId) {
+      setFileTree([]);
+      return;
+    }
+    analysisService.getGraph(currentAnalysisId).then((graph) => {
+      // Build a directory→files tree from graph nodes
+      const dirMap: Record<string, FileTreeNode[]> = {};
+      graph.nodes.forEach((node) => {
+        const path = node.label;
+        const parts = path.split('/');
+        const fileName = parts.pop() || path;
+        const dirName = parts.join('/') || 'root';
+
+        if (!dirMap[dirName]) dirMap[dirName] = [];
+        dirMap[dirName].push({
+          id: node.id,
+          name: fileName,
+          path,
+          type: 'file',
+          lines: node.metrics?.loc,
+          blastRisk: (node.risk as any) || 'low',
+          issuesCount: undefined,
+          language: undefined,
+        });
+      });
+
+      const tree: FileTreeNode[] = Object.entries(dirMap).map(([dir, files], idx) => ({
+        id: `dir-${idx}`,
+        name: dir,
+        path: dir,
+        type: 'directory',
+        children: files,
+      }));
+
+      setFileTree(tree);
+      setTotalFiles(graph.total_nodes);
+
+      // Expand first 3 dirs by default
+      const expanded: Record<string, boolean> = {};
+      tree.slice(0, 3).forEach(d => { expanded[d.id] = true; });
+      setExpandedDirs(expanded);
+    }).catch(console.error);
+  }, [currentAnalysisId]);
 
   const toggleDir = (id: string) => {
     setExpandedDirs((prev) => ({ ...prev, [id]: !prev[id] }));
@@ -82,7 +119,7 @@ export const FileExplorerPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 text-xs font-code text-outline">
-          <span>Total Tree: 128 units</span>
+          <span>Total Tree: {totalFiles} units</span>
         </div>
       </div>
 

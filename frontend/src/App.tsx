@@ -22,13 +22,16 @@ import { FileDetailPage } from './pages/FileDetailPage';
 import { AiAssistantPage } from './pages/AiAssistantPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { WaterTransitionProvider } from './context';
+import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { AppErrorBoundary } from './components/common/AppErrorBoundary';
 
 export const App: React.FC = () => {
   return (
-    <AppProvider>
-      <BrowserRouter>
-        <WaterTransitionProvider>
-          <Routes>
+    <AppErrorBoundary>
+      <AppProvider>
+        <BrowserRouter>
+          <WaterTransitionProvider>
+            <Routes>
             {/* Public Landing, Authenticated Landing, Authentication & Standalone Ingest */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/home" element={<AuthenticatedLandingPage />} />
@@ -38,7 +41,7 @@ export const App: React.FC = () => {
             <Route path="/ingest" element={<StandaloneIngestPage />} />
 
           {/* Authenticated Workspace / Console Layout */}
-          <Route element={<AppLayout />}>
+          <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
             <Route path="/app" element={<OverviewPage />} />
             <Route path="/overview" element={<OverviewPage />} />
             <Route path="/repositories" element={<RepositoriesPage />} />
@@ -58,12 +61,12 @@ export const App: React.FC = () => {
 
           {/* Catch-all Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </WaterTransitionProvider>
-    </BrowserRouter>
-    </AppProvider>
+            </Routes>
+          </WaterTransitionProvider>
+        </BrowserRouter>
+      </AppProvider>
+    </AppErrorBoundary>
   );
 };
 
 export default App;
-

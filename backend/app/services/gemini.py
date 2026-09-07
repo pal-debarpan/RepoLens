@@ -66,7 +66,7 @@ async def chat_with_gemini(
     """
     if not settings.GEMINI_API_KEY:
         logger.info("GEMINI_API_KEY not configured — using mock chat response")
-        return _mock_chat_response(request, analysis_context)
+        return _fallback_response(request, analysis_context, "Gemini is not configured")
 
     system_instruction, messages = _build_messages(request, analysis_context)
     primary_model = settings.GEMINI_MODEL or "gemini-3.5-flash"

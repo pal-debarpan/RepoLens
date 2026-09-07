@@ -1,20 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { testingService } from '../services/api';
-import { TestingRecommendation } from '../types';
+import * as analysisService from '../services/analysisService';
+
+// Derived shape for test recommendations from blast radius data
+interface TestTarget {
+  id: string;
+  testFile: string;
+  testCase: string;
+  targetComponent: string;
+  priority: 'High' | 'Medium' | 'Low';
+  reason: string;
+  executionTimeSec: number;
+  status: 'passed' | 'failed' | 'stale' | 'recommended';
+  lastRun?: string;
+}
 
 export const TestingPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { currentAnalysisId, activeRepo } = useApp();
   const navigate = useNavigate();
 
-  const [tests, setTests] = useState<TestingRecommendation[]>([]);
+  const [tests, setTests] = useState<TestTarget[]>([]);
   const [runningAll, setRunningAll] = useState(false);
   const [executedCount, setExecutedCount] = useState(0);
 
   useEffect(() => {
-    testingService.getRecommendations(activeRepo?.id).then(setTests);
-  }, [activeRepo]);
+    if (!currentAnalysisId) {
+      setTests([]);
+      return;
+    }
+    // Fetch findings with Testing category, and also try to get blast radius test targets
+    analysisService.getFindings(currentAnalysisId, { category: 'Testing' })
+      .then((findings) => {
+        const derived: TestTarget[] = findings.map((f, idx) => ({
+          id: f.id,
+          testFile: f.file_path,
+          testCase: f.title,
+          targetComponent: f.file_path,
+          priority: f.severity.toUpperCase() === 'CRITICAL' || f.severity.toUpperCase() === 'HIGH' ? 'High'
+                  : f.severity.toUpperCase() === 'MEDIUM' ? 'Medium' : 'Low',
+          reason: f.description,
+          executionTimeSec: 0,
+          status: 'recommended' as const,
+        }));
+        setTests(derived);
+      })
+      .catch(console.error);
+  }, [currentAnalysisId]);
 
   const handleRunAll = () => {
     setRunningAll(true);
@@ -77,20 +109,20 @@ export const TestingPage: React.FC = () => {
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <div className="text-outline text-xs uppercase font-label-caps font-semibold">Execution Time Savings</div>
-          <div className="text-2xl font-bold font-code text-primary-container mt-1">8.2s</div>
-          <div className="text-xs text-outline font-code mt-0.5">vs 4m 12s full test runner</div>
+          <div className="text-2xl font-bold font-code text-primary-container mt-1">0s</div>
+          <div className="text-xs text-outline font-code mt-0.5">Pending Execution</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <div className="text-outline text-xs uppercase font-label-caps font-semibold">Coverage Confidence</div>
-          <div className="text-2xl font-bold font-code text-secondary mt-1">84.5%</div>
-          <div className="text-xs text-outline font-code mt-0.5">0 uncovered blast vectors</div>
+          <div className="text-2xl font-bold font-code text-secondary mt-1">{activeRepo?.testCoverage || 0}%</div>
+          <div className="text-xs text-outline font-code mt-0.5">Static Coverage Analysis</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <div className="text-outline text-xs uppercase font-label-caps font-semibold">Stale Test Cases</div>
-          <div className="text-2xl font-bold font-code text-amber-400 mt-1">1 stale</div>
-          <div className="text-xs text-amber-400 font-code mt-0.5">Vulnerability sink test</div>
+          <div className="text-2xl font-bold font-code text-amber-400 mt-1">0 stale</div>
+          <div className="text-xs text-amber-400 font-code mt-0.5">No stale tests detected</div>
         </div>
       </div>
 

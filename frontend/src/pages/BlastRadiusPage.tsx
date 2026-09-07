@@ -1,118 +1,93 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { blastRadiusService } from '../services/api';
-import { BlastRadiusTarget, GraphNode, GraphLink } from '../types';
+import * as analysisService from '../services/analysisService';
+import { BlastRadiusTarget, GraphNode, GraphLink, BlastRadiusResponse } from '../types';
 import { InteractiveGraph } from '../components/graph/InteractiveGraph';
 import { ScoreGauge } from '../components/common/ScoreGauge';
 
 export const BlastRadiusPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { activeRepo, currentAnalysisId } = useApp();
   const navigate = useNavigate();
 
-  const [targets, setTargets] = useState<BlastRadiusTarget[]>([]);
-  const [selectedTargetId, setSelectedTargetId] = useState<string>('target-auth');
+  const [targets, setTargets] = useState<string[]>([]);
+  const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [currentTarget, setCurrentTarget] = useState<BlastRadiusResponse | null>(null);
   const [selectedGraphNodeId, setSelectedGraphNodeId] = useState<string | null>(null);
   const [simulationActive, setSimulationActive] = useState(false);
 
   useEffect(() => {
-    blastRadiusService.getTargets(activeRepo?.id).then((list) => {
-      setTargets(list);
-    });
-  }, [activeRepo]);
+    if (currentAnalysisId) {
+      analysisService.getGraph(currentAnalysisId).then((graph) => {
+        const fileNodes = graph.nodes.map(n => n.id).filter(id => id.includes('.'));
+        if (fileNodes.length > 0) {
+          setTargets(fileNodes);
+          setSelectedTargetId(fileNodes[0]);
+        }
+      }).catch(console.error);
+    } else {
+        setTargets([]);
+        setSelectedTargetId('');
+        setCurrentTarget(null);
+    }
+  }, [currentAnalysisId]);
 
-  const currentTarget = targets.find((t) => t.id === selectedTargetId) || targets[0];
-
-  // Dynamically generate blast ripple graph nodes & links for the selected target
-  const blastNodes: GraphNode[] = [
-    {
-      id: 'target_node',
-      label: currentTarget?.symbol || 'validate_token',
-      subLabel: currentTarget?.filePath || 'services/auth_service.py',
-      category: 'changed',
-      risk: 'critical',
-      x: 350,
-      y: 120,
-      metrics: { afferentCoupling: 5, efferentCoupling: 3, instability: 0.38, loc: 412 },
-    },
-    {
-      id: 'dep_middleware',
-      label: 'jwt_auth.py',
-      subLabel: 'middleware/jwt_auth.py',
-      category: 'impacted',
-      risk: 'critical',
-      x: 180,
-      y: 260,
-      metrics: { afferentCoupling: 4, efferentCoupling: 2, instability: 0.33 },
-    },
-    {
-      id: 'dep_user_route',
-      label: 'User Router',
-      subLabel: 'api/v1/routers/user.py',
-      category: 'impacted',
-      risk: 'high',
-      x: 350,
-      y: 280,
-      metrics: { afferentCoupling: 2, efferentCoupling: 3, instability: 0.6 },
-    },
-    {
-      id: 'dep_billing_route',
-      label: 'Billing Checkout',
-      subLabel: 'api/v1/routers/billing.py',
-      category: 'impacted',
-      risk: 'high',
-      x: 520,
-      y: 260,
-      metrics: { afferentCoupling: 3, efferentCoupling: 4, instability: 0.57 },
-    },
-    {
-      id: 'dep_session',
-      label: 'Session Storage',
-      subLabel: 'core/session.py',
-      category: 'service',
-      risk: 'medium',
-      x: 180,
-      y: 420,
-      metrics: { afferentCoupling: 3, efferentCoupling: 1, instability: 0.25 },
-    },
-    {
-      id: 'test_auth',
-      label: 'test_auth_service.py',
-      subLabel: 'tests/unit',
-      category: 'test',
-      risk: 'low',
-      x: 350,
-      y: 440,
-      metrics: { afferentCoupling: 0, efferentCoupling: 1, instability: 1.0 },
-    },
-    {
-      id: 'test_e2e',
-      label: 'test_api_gateway.py',
-      subLabel: 'tests/e2e',
-      category: 'test',
-      risk: 'low',
-      x: 520,
-      y: 420,
-      metrics: { afferentCoupling: 0, efferentCoupling: 2, instability: 1.0 },
-    },
-  ];
-
-  const blastLinks: GraphLink[] = [
-    { source: 'target_node', target: 'dep_middleware', type: 'calls', isCritical: true },
-    { source: 'target_node', target: 'dep_user_route', type: 'imports', isCritical: true },
-    { source: 'target_node', target: 'dep_billing_route', type: 'calls', isCritical: true },
-    { source: 'dep_middleware', target: 'dep_session', type: 'mutates' },
-    { source: 'test_auth', target: 'target_node', type: 'tests', isCritical: true },
-    { source: 'test_e2e', target: 'dep_user_route', type: 'tests' },
-    { source: 'test_e2e', target: 'dep_billing_route', type: 'tests', isCritical: true },
-  ];
+  useEffect(() => {
+    if (currentAnalysisId && selectedTargetId) {
+      handleRunSimulation();
+    }
+  }, [currentAnalysisId, selectedTargetId]);
 
   const handleRunSimulation = () => {
+    if (!currentAnalysisId || !selectedTargetId) return;
     setSimulationActive(true);
-    setTimeout(() => {
+    analysisService.getBlastRadius(currentAnalysisId, selectedTargetId).then((res) => {
+      setCurrentTarget(res);
       setSimulationActive(false);
-    }, 1500);
+    }).catch(err => {
+      console.error(err);
+      setSimulationActive(false);
+    });
   };
+
+  // Dynamically generate blast ripple graph nodes & links for the selected target
+  const blastNodes: GraphNode[] = [];
+  const blastLinks: GraphLink[] = [];
+
+  if (currentTarget) {
+    const nodeIds = new Set<string>();
+    
+    nodeIds.add(currentTarget.target_file);
+    blastNodes.push({
+      id: currentTarget.target_file,
+      label: currentTarget.target_file.split('/').pop() || currentTarget.target_file,
+      category: 'changed',
+      risk: 'critical'
+    });
+
+    currentTarget.affected_files?.forEach((af) => {
+        if (!nodeIds.has(af.file_path)) {
+            nodeIds.add(af.file_path);
+            blastNodes.push({
+                id: af.file_path,
+                label: af.file_path.split('/').pop() || af.file_path,
+                category: 'impacted',
+                risk: af.impact_level === 'High' ? 'high' : af.impact_level === 'Critical' ? 'critical' : 'medium',
+            });
+        }
+    });
+
+    currentTarget.evidence_chains?.forEach((chain) => {
+        for(let i=0; i<chain.length-1; i++) {
+            blastLinks.push({
+                source: chain[i],
+                target: chain[i+1],
+                type: 'imports',
+                isCritical: true
+            });
+        }
+    });
+  }
 
   return (
     <div className="space-y-space-lg">
@@ -138,7 +113,7 @@ export const BlastRadiusPage: React.FC = () => {
             className="inline-flex items-center gap-space-xs px-space-md py-space-sm rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest text-on-surface text-body-sm font-semibold transition-colors"
           >
             <span className="material-symbols-outlined text-[18px]">checklist</span>
-            <span>View Affected Tests ({currentTarget?.affectedTestsCount || 7})</span>
+            <span>View Affected Tests ({currentTarget?.test_targets?.length || 0})</span>
           </button>
           <button
             onClick={handleRunSimulation}
@@ -166,8 +141,8 @@ export const BlastRadiusPage: React.FC = () => {
             className="flex-1 max-w-md bg-surface-container border border-surface-container-highest text-on-surface rounded-lg px-3 py-1.5 text-xs font-code focus:outline-none focus:border-primary-container font-semibold"
           >
             {targets.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.filePath} :: {t.symbol} ({t.type})
+              <option key={t} value={t}>
+                {t}
               </option>
             ))}
           </select>
@@ -177,12 +152,12 @@ export const BlastRadiusPage: React.FC = () => {
       {/* Telemetry Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-space-md">
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high flex items-center gap-space-md">
-          <ScoreGauge score={currentTarget?.riskScore || 84} size="md" />
+          <ScoreGauge score={currentTarget?.score ?? null} size="md" />
           <div className="flex flex-col">
             <span className="text-outline text-[11px] uppercase font-label-caps font-semibold">
               Impact Score
             </span>
-            <span className="text-sm font-bold font-code text-error">High Severity</span>
+            <span className="text-sm font-bold font-code text-error">{currentTarget?.impact_level || 'Low'} Severity</span>
           </div>
         </div>
 
@@ -191,7 +166,7 @@ export const BlastRadiusPage: React.FC = () => {
             Direct Dependents
           </span>
           <div className="text-2xl font-bold font-code text-on-surface mt-1">
-            {currentTarget?.directDependentsCount || 5} modules
+            {currentTarget?.direct_dependents_count || 0} modules
           </div>
           <span className="text-[11px] text-primary-container font-code">1st degree AST links</span>
         </div>
@@ -201,7 +176,7 @@ export const BlastRadiusPage: React.FC = () => {
             Indirect Downstream
           </span>
           <div className="text-2xl font-bold font-code text-secondary mt-1">
-            {currentTarget?.indirectDependentsCount || 14} modules
+            {currentTarget?.total_affected_count || 0} modules
           </div>
           <span className="text-[11px] text-outline font-code">Transitive call tree</span>
         </div>
@@ -211,7 +186,7 @@ export const BlastRadiusPage: React.FC = () => {
             Affected Endpoints
           </span>
           <div className="text-2xl font-bold font-code text-amber-400 mt-1">
-            {currentTarget?.affectedEndpointsCount || 4} routes
+            {currentTarget?.affected_files?.filter(f => f.file_path.includes('router') || f.file_path.includes('api')).length || 0} routes
           </div>
           <span className="text-[11px] text-amber-400 font-code">External blast edge</span>
         </div>
@@ -220,10 +195,8 @@ export const BlastRadiusPage: React.FC = () => {
           <span className="text-outline text-[11px] uppercase font-label-caps font-semibold">
             Confidence
           </span>
-          <div className="text-2xl font-bold font-code text-primary-container mt-1">
-            {currentTarget?.confidence || 96}%
-          </div>
-          <span className="text-[11px] text-outline font-code">Static AST verified</span>
+          <div className="text-2xl font-bold font-code text-primary-container mt-1">—</div>
+          <span className="text-[11px] text-outline font-code">Evidence chains shown below</span>
         </div>
       </div>
 
@@ -233,20 +206,20 @@ export const BlastRadiusPage: React.FC = () => {
           Ripple Propagation Chain:
         </span>
         <div className="flex items-center gap-2 overflow-x-auto py-1 font-code text-xs">
-          {currentTarget?.ripplePath.map((node, i) => (
+          {(currentTarget?.evidence_chains?.[0] || []).map((node, i, arr) => (
             <React.Fragment key={i}>
               <span
                 className={`px-2.5 py-1 rounded whitespace-nowrap ${
                   i === 0
                     ? 'bg-error-container/40 text-error font-bold border border-error/30'
-                    : i === currentTarget.ripplePath.length - 1
+                    : i === arr.length - 1
                     ? 'bg-primary-container/20 text-primary-container font-semibold'
                     : 'bg-surface-container text-on-surface'
                 }`}
               >
-                {node}
+                {node.split('/').pop() || node}
               </span>
-              {i < currentTarget.ripplePath.length - 1 && (
+              {i < arr.length - 1 && (
                 <span className="material-symbols-outlined text-outline text-[14px]">
                   arrow_forward
                 </span>
@@ -288,7 +261,7 @@ export const BlastRadiusPage: React.FC = () => {
               <span className="material-symbols-outlined text-amber-400 text-[18px]">
                 api
               </span>
-              Affected API Endpoints ({currentTarget?.affectedEndpoints.length})
+              Affected Files ({currentTarget?.affected_files?.length || 0})
             </h3>
             <span className="text-[10px] font-code px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-bold uppercase">
               Consumer Impact
@@ -296,13 +269,13 @@ export const BlastRadiusPage: React.FC = () => {
           </div>
 
           <div className="space-y-2 font-code text-xs">
-            {currentTarget?.affectedEndpoints.map((ep, i) => (
+            {currentTarget?.affected_files?.map((ep, i) => (
               <div
                 key={i}
                 className="p-2.5 rounded-lg bg-surface-container border border-surface-container-highest flex items-center justify-between"
               >
-                <span className="font-semibold text-on-surface">{ep}</span>
-                <span className="text-error font-bold text-[11px]">High Blast</span>
+                <span className="font-semibold text-on-surface truncate">{ep.file_path}</span>
+                <span className="text-error font-bold text-[11px] ml-2 flex-shrink-0">{ep.impact_level} Blast</span>
               </div>
             ))}
           </div>
@@ -315,7 +288,7 @@ export const BlastRadiusPage: React.FC = () => {
               <span className="material-symbols-outlined text-primary-container text-[18px]">
                 checklist
               </span>
-              Required Regression Tests ({currentTarget?.affectedTests.length})
+              Required Regression Tests ({currentTarget?.test_targets?.length || 0})
             </h3>
             <span className="text-[10px] font-code px-1.5 py-0.5 rounded bg-primary-container/20 text-primary-container font-bold uppercase">
               Test Selection
@@ -323,7 +296,7 @@ export const BlastRadiusPage: React.FC = () => {
           </div>
 
           <div className="space-y-2 font-code text-xs">
-            {currentTarget?.affectedTests.map((test, i) => (
+            {currentTarget?.test_targets?.map((test, i) => (
               <div
                 key={i}
                 className="p-2.5 rounded-lg bg-surface-container border border-surface-container-highest flex items-center justify-between"

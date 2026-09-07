@@ -133,7 +133,7 @@ def extract_architecture(
             continue
         for target in targets:
             target_id = node_key_to_id.get(target)
-            if target_id and (source_id, target_id, "imports") not in edge_tuples:
+            if target_id and source_id != target_id and (source_id, target_id, "imports") not in edge_tuples:
                 db_edges.append(AnalysisGraphEdge(
                     id=uuid.uuid4(),
                     analysis_id=analysis_id,
@@ -173,7 +173,7 @@ def extract_architecture(
                             continue
                             
                     target_id = node_key_to_id.get(target_key)
-                    if source_id and target_id:
+                    if source_id and target_id and source_id != target_id:
                         edge_sig = (source_id, target_id, e["edge_type"])
                         if edge_sig not in edge_tuples:
                             db_edges.append(AnalysisGraphEdge(
@@ -197,7 +197,7 @@ def extract_architecture(
                     
                     source_id = node_key_to_id.get(rel_path)
                     target_id = node_key_to_id.get(def_key)
-                    if source_id and target_id:
+                    if source_id and target_id and source_id != target_id:
                         edge_sig = (source_id, target_id, "contains")
                         if edge_sig not in edge_tuples:
                             db_edges.append(AnalysisGraphEdge(

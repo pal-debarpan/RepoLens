@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { repoService } from '../services/api';
+import * as repoService from '../services/repositoryService';
+import * as analysisService from '../services/analysisService';
 
 export const ConnectRepoPage: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshRepositories, setActiveRepoId } = useApp();
+  const { refreshRepositories, setActiveRepoId, setCurrentAnalysisId } = useApp();
 
   const [provider, setProvider] = useState<'github' | 'gitlab' | 'bitbucket' | 'custom'>('github');
-  const [repoUrl, setRepoUrl] = useState('https://github.com/repolens-org/payments-core.git');
-  const [repoName, setRepoName] = useState('payments-core');
+  const [repoUrl, setRepoUrl] = useState('');
+  const [repoName, setRepoName] = useState('');
   const [branch, setBranch] = useState('main');
-  const [token, setToken] = useState('ghp_920f8ab73ce184209fa29c');
+  const [token, setToken] = useState('');
   const [depth, setDepth] = useState<'l1' | 'l3' | 'l4'>('l3');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -19,17 +20,21 @@ export const ConnectRepoPage: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    const created = await repoService.createRepository({
-      name: repoName || 'payments-core',
-      branch: branch || 'main',
-      language: 'TypeScript / Node',
-      framework: 'FastAPI / NestJS',
-      scanDepth: depth === 'l3' ? 'L3 AST' : depth === 'l4' ? 'Full Monorepo' : 'L1 Static',
-    });
+    try {
+      const payload: any = { url: repoUrl };
+      if (token) payload.pat = token;
 
-    await refreshRepositories();
-    setActiveRepoId(created.id);
-    navigate('/progress');
+      const created = await repoService.ingestGitHub(payload);
+      const analysis = await analysisService.createAnalysis({ repository_id: created.id });
+
+      setCurrentAnalysisId(analysis.id);
+      await refreshRepositories();
+      setActiveRepoId(created.id);
+      navigate('/progress');
+    } catch (err: any) {
+      console.error('Ingestion failed:', err);
+      setIsSubmitting(false);
+    }
   };
 
   return (

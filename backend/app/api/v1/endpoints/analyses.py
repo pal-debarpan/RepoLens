@@ -39,11 +39,19 @@ from app.services.gemini import chat_with_gemini
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Every analysis artifact belongs to an authenticated workspace.  Keep the
+# legacy dependency name below only to avoid duplicating each route signature;
+# it deliberately resolves to the strict verifier.
+get_current_user_optional = get_current_user_required
+
 
 # ─── Demo Detection & Scoped Analysis Retrieval ───────────────────────────────
 
 def _is_demo(analysis_id: uuid.UUID) -> bool:
-    return analysis_id == DEMO_ANALYSIS_ID
+    # Analysis responses must always come from persisted repository data.  The
+    # historical fixture is retained only for isolated service tests, never API
+    # rendering or authenticated user traffic.
+    return False
 
 
 def _get_analysis_or_404(
@@ -90,9 +98,9 @@ def create_analysis(
     body: AnalysisCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> AnalysisResponse:
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
 
     # Verify repository exists and belongs to current user
     repo = db.get(Repository, body.repository_id)
@@ -156,19 +164,35 @@ def create_analysis(
 @router.get(
     "",
     response_model=list[AnalysisResponse],
-    summary="Get authenticated user's analysis history",
-    description="Returns the analysis history for the currently authenticated user. Requires authentication.",
+    summary="Get analysis history",
+    description="Returns the analysis history. Accessible analyses include those for public repositories or owned by the authenticated user.",
 )
 def get_user_analyses(
+    repository_id: Optional[uuid.UUID] = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> list[AnalysisResponse]:
-    user_id = uuid.UUID(str(current_user.id))
+    # If a specific repository is requested, check if the user can access it
+    if repository_id:
+        repo = db.get(Repository, repository_id)
+        if not repo:
+            return []
+        
+        user_id = uuid.UUID(str(current_user.id))
+        
+        if repo.user_id != user_id:
+            return []
+            
+        query = db.query(Analysis).filter(Analysis.repository_id == repository_id)
+    else:
+        # If no repository specified, return analyses for all accessible repositories
+        user_id = uuid.UUID(str(current_user.id))
+        query = db.query(Analysis).join(Repository).filter(Repository.user_id == user_id)
+
     analyses = (
-        db.query(Analysis)
-        .filter(Analysis.user_id == user_id)
+        query
         .order_by(Analysis.created_at.desc())
         .limit(limit)
         .offset(offset)
@@ -291,7 +315,7 @@ def get_blast_radius(
     if analysis.status != AnalysisStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Analysis is {analysis.status.value} — wait for COMPLETED status",
+            detail=f"Analysis is {str(analysis.status)} — wait for COMPLETED status",
         )
 
     if not analysis.graph_data:

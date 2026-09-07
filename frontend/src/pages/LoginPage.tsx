@@ -14,18 +14,29 @@ export const LoginPage: React.FC = () => {
   const { waterNavigate } = useWaterNavigate();
   const { theme, login } = useApp();
 
-  const [email, setEmail] = useState('developer@repolens.io');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [focusedField, setFocusedField] = useState<'email' | 'password' | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isDark = theme !== 'light';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email);
-    waterNavigate('/home');
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await login(email, password);
+      waterNavigate('/home');
+    } catch (err: any) {
+      setError(err.message || 'Login failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -129,6 +140,12 @@ export const LoginPage: React.FC = () => {
 
           {/* Credentials Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 text-xs rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500">
+                {error}
+              </div>
+            )}
+
             {/* Email Address */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -226,7 +243,7 @@ export const LoginPage: React.FC = () => {
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Password"
                   className="repolens-3d-input pr-10 tracking-wider"
                 />
                 <button
@@ -281,18 +298,17 @@ export const LoginPage: React.FC = () => {
             {/* Full-width Primary CTA Button */}
             <button
               type="submit"
-              onClick={(e) => {
-                login(email);
-                waterNavigate('/home', e);
-              }}
+              disabled={loading}
               className={`page-link w-full h-11 rounded-xl font-sans text-xs font-bold tracking-wide transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 cursor-pointer ${
+                loading ? 'opacity-70 pointer-events-none' : ''
+              } ${
                 isDark
                   ? 'bg-[#B6FF3C] hover:bg-[#C4FF5E] text-[#0D0F0D] shadow-[0_0_20px_rgba(182,255,60,0.25)] hover:shadow-[0_0_28px_rgba(182,255,60,0.4)] focus-visible:ring-[#B6FF3C]'
                   : 'bg-[#046A38] hover:bg-[#03542C] text-[#FFFFFF] shadow-[0_2px_12px_rgba(4,106,56,0.25)] hover:shadow-[0_4px_16px_rgba(4,106,56,0.35)] focus-visible:ring-[#046A38]'
               }`}
             >
-              <span>Sign In to Console</span>
-              <ArrowRight size={15} strokeWidth={2.2} />
+              <span>{loading ? 'Signing In...' : 'Sign In to Console'}</span>
+              {!loading && <ArrowRight size={15} strokeWidth={2.2} />}
             </button>
           </form>
 

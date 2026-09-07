@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.auth import AuthenticatedUser, get_current_user_required
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.auth import SignupRequest, LoginRequest, AuthResponse
@@ -13,6 +14,16 @@ from app.schemas.auth import SignupRequest, LoginRequest, AuthResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/me", response_model=dict, summary="Validate the current Supabase session")
+def me(current_user: AuthenticatedUser = Depends(get_current_user_required)) -> dict[str, Any]:
+    """Return only JWT-backed identity data for the active browser session."""
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "user_metadata": current_user.user_metadata,
+    }
 
 
 def _get_supabase_auth_headers() -> dict[str, str]:

@@ -3,20 +3,22 @@ import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
 import { RepoLensLogo } from '../components/common/RepoLensLogo';
 import { ChatMessage } from '../types';
+import * as analysisService from '../services/analysisService';
 
 export const AiAssistantPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { activeRepo, currentAnalysisId } = useApp();
   const navigate = useNavigate();
 
   const [input, setInput] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const msgIdCounter = React.useRef(10);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
       role: 'assistant',
       content:
-        "Hello! I am RepoLens AI Assistant. I have indexed the complete AST semantic graph for **repolens-demo**. How can I help you analyze blast radius, fix security vectors, or review dependencies today?",
-      timestamp: '14:20',
+        `Hello! I am RepoLens AI Assistant. I have indexed the complete AST semantic graph${activeRepo ? ` for **${activeRepo.name}**` : ''}. How can I help you analyze blast radius, fix security vectors, or review dependencies today?`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       suggestedActions: [
         'Analyze blast radius of refactoring auth_service.py',
         'Generate remediation patch for CWE-78',
@@ -25,7 +27,7 @@ export const AiAssistantPage: React.FC = () => {
     },
   ]);
 
-  const handleSend = (textToSend?: string) => {
+  const handleSend = async (textToSend?: string) => {
     const text = textToSend || input;
     if (!text.trim()) return;
 
@@ -34,56 +36,46 @@ export const AiAssistantPage: React.FC = () => {
       id: `msg-${msgIdCounter.current}`,
       role: 'user',
       content: text,
-      timestamp: 'Just now',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setIsLoading(true);
 
-    // Simulate AI response based on query
-    setTimeout(() => {
-      let aiReply: ChatMessage;
-
-      msgIdCounter.current += 1;
-      const replyId = `msg-${msgIdCounter.current}`;
-
-      if (text.toLowerCase().includes('blast') || text.toLowerCase().includes('auth')) {
-        aiReply = {
-          id: replyId,
+    if (currentAnalysisId) {
+      try {
+        const res = await analysisService.chat(currentAnalysisId, { message: text });
+        msgIdCounter.current += 1;
+        const aiReply: ChatMessage = {
+          id: `msg-${msgIdCounter.current}`,
           role: 'assistant',
-          content:
-            "I analyzed the blast radius for `services/auth_service.py::validate_token`.\n\n### Impact Summary:\n- **Risk Score**: 84% (High Risk)\n- **Direct Dependents**: 5 modules (`middleware/jwt_auth.py`, `api/v1/routers/user.py`, `api/v1/routers/billing.py`, etc.)\n- **Indirect Downstream**: 14 modules\n- **Affected Endpoints**: 4 critical routes including `/api/v1/billing/checkout`\n- **Targeted Tests**: 7 unit/integration suites recommended for execution.\n\nWould you like me to open the interactive ripple graph?",
-          timestamp: 'Just now',
-          suggestedActions: ['Open in Blast Simulator', 'View Affected Tests'],
+          content: res.reply,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         };
-      } else if (text.toLowerCase().includes('cwe') || text.toLowerCase().includes('patch') || text.toLowerCase().includes('injection')) {
-        aiReply = {
-          id: (Date.now() + 1).toString(),
+        setMessages((prev) => [...prev, aiReply]);
+      } catch (err) {
+        msgIdCounter.current += 1;
+        setMessages((prev) => [...prev, {
+          id: `msg-${msgIdCounter.current}`,
           role: 'assistant',
-          content:
-            "Here is the recommended AST-safe remediation for **CWE-78 (OS Command Injection)** in `services/auth_service.py:142`:\n\nAvoid invoking `shell=True` with string formatting. Instead, pass command arguments as a token array with `shell=False`:",
-          timestamp: 'Just now',
-          codeSnippet: {
-            language: 'python',
-            code: `- cmd = f"{command_prefix} --user {user_id} --realm {payload.get('realm')}"\n- result = subprocess.run(cmd, shell=True, capture_output=True, text=True)\n+ cmd = ["/usr/local/bin/ldap_verify", "--user", user_id, "--realm", payload.get("realm", "")]\n+ result = subprocess.run(cmd, shell=False, capture_output=True, text=True)`,
-            diff: true,
-            filePath: 'services/auth_service.py',
-          },
-          suggestedActions: ['Apply Patch to AST Context', 'Run Regression Tests'],
-        };
-      } else {
-        aiReply = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content:
-            `Analysis completed for query: "${text}". Based on the current AST index, ${activeRepo?.name} exhibits ${activeRepo?.blastVectorsCount} active blast vectors and ${activeRepo?.openIssuesCount} open audit findings. I recommend running the test suite to verify module stability.`,
-          timestamp: 'Just now',
-          suggestedActions: ['Simulate Blast Radius', 'Check Issues'],
-        };
+          content: 'Sorry, I encountered an error communicating with the AI backend. Please try again.',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        }]);
+      } finally {
+        setIsLoading(false);
       }
-
-      setMessages((prev) => [...prev, aiReply]);
-    }, 600);
+    } else {
+      // No analysis loaded — fall back to helpful message
+      msgIdCounter.current += 1;
+      setMessages((prev) => [...prev, {
+        id: `msg-${msgIdCounter.current}`,
+        role: 'assistant',
+        content: 'Please ingest a repository first so I can analyze it for you. Navigate to "Connect Repo" to get started.',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      }]);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -174,7 +166,7 @@ export const AiAssistantPage: React.FC = () => {
                       key={i}
                       onClick={() => {
                         if (action.includes('Blast')) navigate('/blast-radius');
-                        else if (action.includes('Patch')) navigate('/issues/ISSUE-2041');
+                        else if (action.includes('Patch')) navigate('/issues');
                         else if (action.includes('Tests')) navigate('/testing');
                         else handleSend(action);
                       }}
@@ -196,6 +188,20 @@ export const AiAssistantPage: React.FC = () => {
             </div>
           </div>
         ))}
+
+        {/* AI typing indicator */}
+        {isLoading && (
+          <div className="flex items-start gap-space-sm justify-start">
+            <div className="mt-1 flex-shrink-0">
+              <RepoLensLogo size="sm" variant="icon" />
+            </div>
+            <div className="rounded-xl p-4 bg-surface-container-low border border-surface-container-high flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-primary-container animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 rounded-full bg-primary-container animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 rounded-full bg-primary-container animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Suggested Quick Prompts */}

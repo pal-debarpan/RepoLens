@@ -1,32 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { issueService } from '../services/api';
-import { IssueItem } from '../types';
+import { useApp } from '../context';
+import * as analysisService from '../services/analysisService';
+import { FindingResponse } from '../types';
 
 export const IssueDetailPage: React.FC = () => {
   const { issueId } = useParams<{ issueId: string }>();
   const navigate = useNavigate();
+  const { currentAnalysisId } = useApp();
 
-  const [issue, setIssue] = useState<IssueItem | null>(null);
+  const [issue, setIssue] = useState<FindingResponse | null>(null);
   const [patchApplied, setPatchApplied] = useState(false);
 
   useEffect(() => {
-    issueService.getIssueById(issueId || 'ISSUE-2041').then((res) => {
-      setIssue(res || null);
-    });
-  }, [issueId]);
+    if (currentAnalysisId && issueId) {
+      analysisService.getFinding(currentAnalysisId, issueId)
+        .then((res) => setIssue(res || null))
+        .catch(() => setIssue(null));
+    }
+  }, [currentAnalysisId, issueId]);
 
   if (!issue) {
     return (
       <div className="p-8 text-center text-outline font-body-md">
-        Loading issue telemetry or issue not found...
+        Loading finding telemetry...
       </div>
     );
   }
 
   const handleApplyPatch = () => {
     setPatchApplied(true);
-    issueService.resolveIssue(issue.id);
   };
 
   return (
@@ -43,14 +46,16 @@ export const IssueDetailPage: React.FC = () => {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-code text-xs text-error font-bold">{issue.id}</span>
+              <span className="font-code text-xs text-error font-bold">{issue.id.slice(0,8)}</span>
               <span className="font-code text-xs text-outline">•</span>
-              <span className="font-code text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary-container font-mono">
-                {issue.cwe}
-              </span>
-              {issue.cve && (
+              {issue.metadata_payload?.cwe && (
+                <span className="font-code text-xs px-1.5 py-0.5 rounded bg-surface-container-highest text-primary-container font-mono">
+                  {issue.metadata_payload.cwe}
+                </span>
+              )}
+              {issue.metadata_payload?.cve && (
                 <span className="font-code text-xs px-1.5 py-0.5 rounded bg-error-container/30 text-error font-mono font-semibold">
-                  {issue.cve}
+                  {issue.metadata_payload.cve}
                 </span>
               )}
             </div>
@@ -88,8 +93,8 @@ export const IssueDetailPage: React.FC = () => {
               <span className="material-symbols-outlined text-[16px] text-primary-container">
                 code
               </span>
-              <span className="text-on-surface font-semibold">{issue.filePath}</span>
-              <span>: Line {issue.line}</span>
+              <span className="text-on-surface font-semibold">{issue.file_path}</span>
+              <span>: Line {issue.line_number || 1}</span>
             </div>
             <span className="text-error font-semibold">Taint Sink Detected</span>
           </div>
@@ -164,17 +169,17 @@ export const IssueDetailPage: React.FC = () => {
                 <div className="font-bold text-error mt-0.5">{issue.severity}</div>
               </div>
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase font-medium">Blast Risk Score</span>
-                <div className="font-bold text-amber-400 mt-0.5 font-heading">{issue.blastRadiusScore}% Ripple</div>
-              </div>
-              <div className="p-2 rounded bg-surface-container">
                 <span className="text-outline text-[10px] uppercase font-medium">Category</span>
-                <div className="font-semibold text-on-surface mt-0.5">{issue.category}</div>
+                <div className="font-bold text-amber-400 mt-0.5 font-heading">{issue.category}</div>
               </div>
               <div className="p-2 rounded bg-surface-container">
-                <span className="text-outline text-[10px] uppercase font-medium">Status</span>
+                <span className="text-outline text-[10px] uppercase font-medium">File Path</span>
+                <div className="font-semibold text-on-surface mt-0.5 truncate font-code text-[11px]">{issue.file_path}</div>
+              </div>
+              <div className="p-2 rounded bg-surface-container">
+                <span className="text-outline text-[10px] uppercase font-medium">Line</span>
                 <div className="font-semibold text-primary-container mt-0.5">
-                  {patchApplied ? 'Resolved' : issue.status}
+                  {patchApplied ? 'Resolved' : `#${issue.line_number || 1}`}
                 </div>
               </div>
             </div>
@@ -182,6 +187,11 @@ export const IssueDetailPage: React.FC = () => {
             <p className="text-xs text-on-surface-variant leading-relaxed font-sans">
               {issue.description}
             </p>
+            {issue.evidence && (
+              <p className="text-xs text-outline leading-relaxed font-code mt-1 p-2 bg-surface-container rounded">
+                {issue.evidence}
+              </p>
+            )}
           </div>
 
           {/* AI Remediation Diff Proposal */}
@@ -216,7 +226,7 @@ export const IssueDetailPage: React.FC = () => {
             </div>
 
             <p className="text-xs text-outline">
-              Passing arguments as a list with <code className="text-on-surface font-code">shell=False</code> bypasses shell interpolation, completely neutralizing injection vectors.
+              {issue.suggested_fix || 'Passing arguments as a list with <code>shell=False</code> bypasses shell interpolation, completely neutralizing injection vectors.'}
             </p>
 
             <button

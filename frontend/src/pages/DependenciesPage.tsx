@@ -1,21 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { dependencyService } from '../services/api';
+import * as analysisService from '../services/analysisService';
 import { DependencyItem } from '../types';
 
 export const DependenciesPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { currentAnalysisId, activeRepo } = useApp();
   const navigate = useNavigate();
 
   const [dependencies, setDependencies] = useState<DependencyItem[]>([]);
+  const [stats, setStats] = useState({ direct: 0, transitive: 0, vulnerable: 0 });
   const [filterType, setFilterType] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    dependencyService.getDependencies(activeRepo?.id).then(setDependencies);
-  }, [activeRepo]);
+    if (currentAnalysisId) {
+      analysisService.getSbomSummary(currentAnalysisId).then((sbom) => {
+        const components = sbom?.components ?? [];
+        const deps: DependencyItem[] = components.map((c) => ({
+          id: c.name + c.version,
+          name: c.name,
+          version: c.version,
+          latestVersion: '-',
+          type: c.direct ? 'direct' : 'transitive',
+          license: c.licenses && c.licenses.length > 0 ? (c.licenses[0]?.license?.id || 'Unknown') : 'Unknown',
+          status: c.vulnerabilities_count > 0 ? 'vulnerable' : 'up-to-date',
+          vulnerabilitiesCount: c.vulnerabilities_count ?? 0,
+          dependentsCount: c.affected_files ? c.affected_files.length : 0,
+          ecosystem: (c.ecosystem || 'unknown').toLowerCase() as any,
+        }));
+        setDependencies(deps);
+        setStats({
+          direct: sbom.direct_count || deps.filter(d => d.type === 'direct').length,
+          transitive: sbom.transitive_count || deps.filter(d => d.type === 'transitive').length,
+          vulnerable: sbom.vulnerable_components_count || deps.filter(d => d.status === 'vulnerable').length,
+        });
+      }).catch((err) => {
+        console.warn('SBOM fetch failed:', err);
+        setDependencies([]);
+      });
+    } else {
+      setDependencies([]);
+    }
+  }, [currentAnalysisId]);
 
   const filtered = dependencies.filter((dep) => {
     const matchesSearch = dep.name.toLowerCase().includes(search.toLowerCase());
@@ -56,20 +84,20 @@ export const DependenciesPage: React.FC = () => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-space-md">
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <div className="text-outline text-xs uppercase font-label-caps font-semibold">Direct Packages</div>
-          <div className="text-2xl font-bold font-code text-on-surface mt-1">7</div>
+          <div className="text-2xl font-bold font-code text-on-surface mt-1">{stats.direct}</div>
           <div className="text-xs text-outline font-code mt-0.5">Top-level manifest</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <div className="text-outline text-xs uppercase font-label-caps font-semibold">Transitive Graph</div>
-          <div className="text-2xl font-bold font-code text-secondary mt-1">42</div>
+          <div className="text-2xl font-bold font-code text-secondary mt-1">{stats.transitive}</div>
           <div className="text-xs text-outline font-code mt-0.5">Resolved AST symbols</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
-          <div className="text-outline text-xs uppercase font-label-caps font-semibold">Vulnerable CVEs</div>
-          <div className="text-2xl font-bold font-code text-error mt-1">1</div>
-          <div className="text-xs text-error font-code mt-0.5">CVE-2022-29217 (pyjwt)</div>
+          <div className="text-outline text-xs uppercase font-label-caps font-semibold">Vulnerable Packages</div>
+          <div className="text-2xl font-bold font-code text-error mt-1">{stats.vulnerable}</div>
+          <div className="text-xs text-error font-code mt-0.5">Identified via OSV</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">

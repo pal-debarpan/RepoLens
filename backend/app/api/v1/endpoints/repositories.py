@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
-from app.core.auth import AuthenticatedUser, get_current_user_optional
+from app.core.auth import AuthenticatedUser, get_current_user_optional, get_current_user_required
 from app.db.session import get_db
 from app.ingestion.github import ingest_github_repo
 from app.ingestion.zip import ingest_zip_upload
@@ -16,6 +16,10 @@ from app.ingestion.exceptions import IngestionError, SecurityError, ResourceLimi
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Repository ingestion and persisted workspace data are protected resources.
+# Existing route annotations use this name, so bind it to the strict verifier.
+get_current_user_optional = get_current_user_required
 
 
 def _ingested_to_dict(ingested) -> dict:
@@ -35,7 +39,7 @@ def ingest_github(
     *,
     db: Session = Depends(get_db),
     request: schemas.GitHubIngestRequest,
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Ingest a GitHub repository.
@@ -61,7 +65,7 @@ def ingest_github(
         logger.exception("Unexpected error during github ingestion of %s: %s", target_url, e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingestion failed due to an unexpected error.")
 
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     repo_dict = _ingested_to_dict(ingested)
     
     try:
@@ -94,7 +98,7 @@ def ingest_upload(
     *,
     db: Session = Depends(get_db),
     file: UploadFile = File(...),
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Ingest a repository from a ZIP file upload.
@@ -111,7 +115,7 @@ def ingest_upload(
         logger.exception("Unexpected error during zip upload ingestion: %s", e)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Upload processing failed.")
 
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     repo_dict = _ingested_to_dict(ingested)
 
     try:
@@ -144,12 +148,12 @@ def create_repository(
     *,
     db: Session = Depends(get_db),
     repository_in: schemas.RepositoryCreate,
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Create a new repository record.
     """
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     try:
         repository = crud.repository.create(db=db, obj_in=repository_in, user_id=user_id)
         return repository
@@ -162,12 +166,12 @@ def read_repositories(
     db: Session = Depends(get_db),
     skip: int = 0,
     limit: int = 100,
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Retrieve repositories owned by the current user (plus demo repositories).
     """
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     repositories = crud.repository.get_multi(db, user_id=user_id, skip=skip, limit=limit)
     return repositories
 
@@ -177,12 +181,12 @@ def read_repository(
     *,
     db: Session = Depends(get_db),
     repository_id: UUID,
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Get a repository by ID. Enforces user isolation.
     """
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     repository = crud.repository.get(db=db, id=repository_id, user_id=user_id)
     if not repository:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found")
@@ -195,12 +199,12 @@ def update_repository(
     db: Session = Depends(get_db),
     repository_id: UUID,
     repository_in: schemas.RepositoryUpdate,
-    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+    current_user: AuthenticatedUser = Depends(get_current_user_required),
 ) -> Any:
     """
     Update a repository. Only the owner can update.
     """
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    user_id = uuid.UUID(str(current_user.id))
     repository = crud.repository.get(db=db, id=repository_id, user_id=user_id)
     if not repository:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Repository not found")

@@ -1,27 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { issueService } from '../services/api';
-import { IssueItem } from '../types';
+import * as analysisService from '../services/analysisService';
+import { FindingResponse } from '../types';
 
 export const IssuesPage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { currentAnalysisId, activeRepo } = useApp();
   const navigate = useNavigate();
 
-  const [issues, setIssues] = useState<IssueItem[]>([]);
+  const [issues, setIssues] = useState<FindingResponse[]>([]);
   const [severityFilter, setSeverityFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    issueService.getIssues(activeRepo?.id).then(setIssues);
-  }, [activeRepo]);
+    if (currentAnalysisId) {
+      analysisService.getFindings(currentAnalysisId).then(setIssues).catch(console.error);
+    } else {
+      setIssues([]);
+    }
+  }, [currentAnalysisId]);
 
   const filtered = issues.filter((issue) => {
     const matchesSearch =
       issue.title.toLowerCase().includes(search.toLowerCase()) ||
-      issue.filePath.toLowerCase().includes(search.toLowerCase()) ||
-      issue.cwe.toLowerCase().includes(search.toLowerCase());
+      issue.file_path.toLowerCase().includes(search.toLowerCase()) ||
+      (issue.metadata_payload?.cwe || '').toLowerCase().includes(search.toLowerCase());
     const matchesSeverity = severityFilter === 'all' || issue.severity.toLowerCase() === severityFilter.toLowerCase();
     const matchesCategory = categoryFilter === 'all' || issue.category.toLowerCase() === categoryFilter.toLowerCase();
     return matchesSearch && matchesSeverity && matchesCategory;
@@ -78,7 +82,7 @@ export const IssuesPage: React.FC = () => {
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">Critical</span>
             <span className="material-symbols-outlined text-error text-[18px]">error</span>
           </div>
-          <div className="text-2xl font-bold font-code text-error mt-1">2</div>
+          <div className="text-2xl font-bold font-code text-error mt-1">{issues.filter(i => i.severity.toUpperCase() === 'CRITICAL').length}</div>
           <div className="text-xs text-outline font-code mt-0.5">Zero-day / Taint injection</div>
         </div>
 
@@ -90,7 +94,7 @@ export const IssuesPage: React.FC = () => {
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">High</span>
             <span className="material-symbols-outlined text-amber-400 text-[18px]">warning</span>
           </div>
-          <div className="text-2xl font-bold font-code text-amber-400 mt-1">2</div>
+          <div className="text-2xl font-bold font-code text-amber-400 mt-1">{issues.filter(i => i.severity.toUpperCase() === 'HIGH').length}</div>
           <div className="text-xs text-outline font-code mt-0.5">Circular / Salt generation</div>
         </div>
 
@@ -102,7 +106,7 @@ export const IssuesPage: React.FC = () => {
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">Medium</span>
             <span className="material-symbols-outlined text-secondary text-[18px]">info</span>
           </div>
-          <div className="text-2xl font-bold font-code text-secondary mt-1">1</div>
+          <div className="text-2xl font-bold font-code text-secondary mt-1">{issues.filter(i => i.severity.toUpperCase() === 'MEDIUM').length}</div>
           <div className="text-xs text-outline font-code mt-0.5">Queue concurrency cap</div>
         </div>
 
@@ -179,24 +183,25 @@ export const IssuesPage: React.FC = () => {
 
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-space-xs flex-wrap">
-                  <span className="font-code text-xs text-outline">{issue.id}</span>
+                  <span className="font-code text-xs text-outline">{issue.id.slice(0, 8)}</span>
                   <span className="font-semibold text-body-sm text-on-surface group-hover:text-primary-container transition-colors truncate">
                     {issue.title}
                   </span>
-                  <span className="font-code text-[11px] px-1.5 py-0.2 rounded bg-surface-container-highest text-primary-container">
-                    {issue.cwe}
-                  </span>
+                  {issue.metadata_payload?.cwe && (
+                    <span className="font-code text-[11px] px-1.5 py-0.2 rounded bg-surface-container-highest text-primary-container">
+                      {issue.metadata_payload.cwe}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 mt-1 text-xs text-outline font-code">
                   <span className="material-symbols-outlined text-[14px]">description</span>
                   <span>
-                    {issue.filePath}:{issue.line}
+                    {issue.file_path}:{issue.line_number || 1}
                   </span>
-                  <span>•</span>
-                  <span>author: {issue.author}</span>
-                  <span>•</span>
-                  <span>commit: {issue.introducedCommit}</span>
+                  {issue.category && (
+                    <><span>•</span><span>{issue.category}</span></>
+                  )}
                 </div>
               </div>
             </div>
@@ -204,10 +209,10 @@ export const IssuesPage: React.FC = () => {
             <div className="flex items-center gap-space-lg flex-shrink-0">
               <div className="flex flex-col text-right">
                 <span className="text-[10px] uppercase font-label-caps text-outline">
-                  Blast Impact
+                  Category
                 </span>
                 <span className="font-code text-xs font-bold text-amber-400">
-                  {issue.blastRadiusScore}% Ripple
+                  {issue.category}
                 </span>
               </div>
 

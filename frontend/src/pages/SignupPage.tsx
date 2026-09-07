@@ -14,13 +14,15 @@ export const SignupPage: React.FC = () => {
   const { waterNavigate } = useWaterNavigate();
   const { theme, login } = useApp();
 
-  const [fullName, setFullName] = useState('Alex Vance');
-  const [email, setEmail] = useState('alex.vance@blackmesa.tech');
-  const [teamName, setTeamName] = useState('Core Architecture Guild');
-  const [password, setPassword] = useState('sUp3r-S3cur3-p@ss');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [agreed, setAgreed] = useState(true);
+  const [agreed, setAgreed] = useState(false);
   const [focusedField, setFocusedField] = useState<'name' | 'team' | 'email' | 'password' | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const isDark = theme !== 'light';
 
@@ -40,10 +42,24 @@ export const SignupPage: React.FC = () => {
 
   const strength = calculateStrength(password);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(email, fullName);
-    waterNavigate('/home');
+    if (loading) return;
+    if (!agreed) {
+      setError('You must agree to the Master Service Agreement.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      // @ts-ignore
+      await useApp().signup?.(email, password, fullName);
+      waterNavigate('/home');
+    } catch (err: any) {
+      setError(err.message || 'Signup failed.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -146,7 +162,13 @@ export const SignupPage: React.FC = () => {
           </div>
 
           {/* Registration Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSignup} className="space-y-4">
+            {error && (
+              <div className="p-3 text-xs rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-500">
+                {error}
+              </div>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Full Name */}
               <div className="space-y-1.5">
@@ -187,7 +209,7 @@ export const SignupPage: React.FC = () => {
                     onFocus={() => setFocusedField('name')}
                     onBlur={() => setFocusedField(null)}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Alex Vance"
+                    placeholder="e.g. Alex Vance"
                     className="repolens-3d-input"
                   />
                 </div>
@@ -330,7 +352,7 @@ export const SignupPage: React.FC = () => {
                   onFocus={() => setFocusedField('password')}
                   onBlur={() => setFocusedField(null)}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••••••"
+                  placeholder="Minimum 6 characters"
                   className="repolens-3d-input pr-10 tracking-wider"
                 />
                 <button
@@ -409,18 +431,17 @@ export const SignupPage: React.FC = () => {
             {/* Submit Button */}
             <button
               type="submit"
-              onClick={(e) => {
-                login(email, fullName);
-                waterNavigate('/home', e);
-              }}
+              disabled={loading || !agreed}
               className={`page-link w-full h-11 rounded-xl font-sans text-xs font-bold tracking-wide transition-all duration-200 flex items-center justify-center gap-2 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 cursor-pointer ${
+                (loading || !agreed) ? 'opacity-50 pointer-events-none' : ''
+              } ${
                 isDark
                   ? 'bg-[#B6FF3C] hover:bg-[#C4FF5E] text-[#0D0F0D] shadow-[0_0_20px_rgba(182,255,60,0.25)] hover:shadow-[0_0_28px_rgba(182,255,60,0.4)] focus-visible:ring-[#B6FF3C]'
                   : 'bg-[#046A38] hover:bg-[#03542C] text-[#FFFFFF] shadow-[0_2px_12px_rgba(4,106,56,0.25)] hover:shadow-[0_4px_16px_rgba(4,106,56,0.35)] focus-visible:ring-[#046A38]'
               }`}
             >
-              <span>Create Account &amp; Ingest Codebase</span>
-              <ArrowRight size={15} strokeWidth={2.2} />
+              <span>{loading ? 'Provisioning Account...' : 'Provision Secure Sandbox'}</span>
+              {!loading && <ArrowRight size={15} strokeWidth={2.2} />}
             </button>
           </form>
 

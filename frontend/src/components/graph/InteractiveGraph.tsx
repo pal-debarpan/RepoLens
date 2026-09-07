@@ -25,9 +25,14 @@ export const InteractiveGraph: React.FC<InteractiveGraphProps> = ({
   const selectedNodeId = controlledSelectedId !== undefined ? controlledSelectedId : internalSelectedId;
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
-  const nodes = initialNodes.map((n) => {
+  const nodes = initialNodes.map((n, index) => {
     const pos = draggedPositions[n.id];
-    return pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) ? { ...n, x: pos.x, y: pos.y } : n;
+    if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y)) return { ...n, x: pos.x, y: pos.y };
+    // The analysis API intentionally stores topology, not presentation layout.
+    // Give every real node a stable local position so no nodes overlap at 0,0.
+    if (Number.isFinite(n.x) && Number.isFinite(n.y)) return n;
+    const columns = Math.max(1, Math.ceil(Math.sqrt(initialNodes.length)));
+    return { ...n, x: 110 + (index % columns) * 180, y: 100 + Math.floor(index / columns) * 115 };
   });
 
   // Pan & Zoom state
@@ -69,6 +74,11 @@ export const InteractiveGraph: React.FC<InteractiveGraphProps> = ({
   const handleResetView = () => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
+  };
+
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    setZoom((value) => Math.min(2.5, Math.max(0.5, value + (e.deltaY < 0 ? 0.1 : -0.1))));
   };
 
   // Node Dragging & Canvas Panning
@@ -165,6 +175,11 @@ export const InteractiveGraph: React.FC<InteractiveGraphProps> = ({
 
   return (
     <div className="relative w-full rounded-xl bg-surface-container-lowest border border-surface-container-high overflow-hidden shadow-inner flex flex-col">
+      {nodes.length === 0 && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-surface-container-lowest/90 text-center p-6">
+          <div><div className="text-on-surface font-semibold">No architecture relationships available</div><div className="text-outline text-xs mt-1">This analysis did not produce graph nodes yet.</div></div>
+        </div>
+      )}
       {/* Top Graph Controls Bar */}
       <div className="absolute top-3 right-3 z-10 flex items-center gap-1.5 p-1 rounded-lg bg-surface-container-low backdrop-blur-[12px] border border-surface-container-highest shadow-md">
         <button
@@ -225,6 +240,7 @@ export const InteractiveGraph: React.FC<InteractiveGraphProps> = ({
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onClick={handleCanvasClick}
+        onWheel={handleWheel}
       >
         {/* Background Grid Pattern */}
         <defs>
@@ -449,19 +465,19 @@ export const InteractiveGraph: React.FC<InteractiveGraphProps> = ({
             <div className="p-1.5 rounded bg-surface-container">
               <div className="text-[10px] text-outline">Afferent (Ca)</div>
               <div className="text-xs font-bold text-on-surface">
-                {selectedNode.metrics?.afferentCoupling ?? 3}
+                {selectedNode.metrics?.afferentCoupling ?? '—'}
               </div>
             </div>
             <div className="p-1.5 rounded bg-surface-container">
               <div className="text-[10px] text-outline">Efferent (Ce)</div>
               <div className="text-xs font-bold text-on-surface">
-                {selectedNode.metrics?.efferentCoupling ?? 2}
+                {selectedNode.metrics?.efferentCoupling ?? '—'}
               </div>
             </div>
             <div className="p-1.5 rounded bg-surface-container">
               <div className="text-[10px] text-outline">Instability (I)</div>
               <div className="text-xs font-bold text-primary-container">
-                {selectedNode.metrics?.instability?.toFixed(2) ?? '0.40'}
+                {selectedNode.metrics?.instability?.toFixed(2) ?? '—'}
               </div>
             </div>
           </div>

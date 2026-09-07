@@ -56,7 +56,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
   activePath: activePathProp,
   className = '',
 }) => {
-  const { repositories, sidebarCollapsed: contextCollapsed, setSidebarCollapsed, theme: contextTheme } = useApp();
+  const { repositories, activeRepo, sidebarCollapsed: contextCollapsed, setSidebarCollapsed, theme: contextTheme } = useApp();
   const location = useLocation();
 
   // Determine current theme and collapse state
@@ -82,7 +82,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           label: 'Repositories',
           to: '/repositories',
           icon: FolderGit2,
-          badge: String(repositories.length || 3),
+          badge: String(repositories.length),
           badgeType: 'numeric',
         },
         { label: 'Progress', to: '/progress', icon: Terminal },
@@ -97,7 +97,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           label: 'Security',
           to: '/security',
           icon: ShieldAlert,
-          badge: '3',
+          badge: activeRepo?.openIssuesCount ? String(activeRepo.openIssuesCount) : undefined,
           badgeType: 'alert',
         },
         { label: 'Dependencies', to: '/dependencies', icon: GitFork },
@@ -112,7 +112,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
           label: 'Issues',
           to: '/issues',
           icon: Bug,
-          badge: '8',
+          badge: activeRepo?.openIssuesCount ? String(activeRepo.openIssuesCount) : undefined,
           badgeType: 'numeric',
         },
         { label: 'Testing', to: '/testing', icon: CheckSquare },
@@ -400,7 +400,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({
                   isDark ? 'text-[#f1f5f9]' : 'text-[#0f172a]'
                 }`}
               >
-                repolens-demo
+                {activeRepo?.name || 'repolens-demo'}
               </span>
             </div>
           </div>

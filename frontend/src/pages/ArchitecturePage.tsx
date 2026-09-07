@@ -1,24 +1,62 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../context';
-import { architectureService } from '../services/api';
-import { GraphNode, GraphLink } from '../types';
+import * as analysisService from '../services/analysisService';
+import { GraphNode, GraphLink, GraphResponse, UmlResponse } from '../types';
 import { InteractiveGraph } from '../components/graph/InteractiveGraph';
 
 export const ArchitecturePage: React.FC = () => {
-  const { activeRepo } = useApp();
+  const { activeRepo, currentAnalysisId } = useApp();
   const navigate = useNavigate();
 
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
+  const [graphData, setGraphData] = useState<GraphResponse | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [uml, setUml] = useState<UmlResponse | null>(null);
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'empty' | 'error'>('empty');
 
   useEffect(() => {
-    architectureService.getGraph(activeRepo?.id).then((graph) => {
-      setNodes(graph.nodes);
-      setLinks(graph.links);
-    });
-  }, [activeRepo]);
+    if (currentAnalysisId) {
+      setLoadState('loading');
+      analysisService.getGraph(currentAnalysisId).then((graph) => {
+        setGraphData(graph);
+        const apiNodes = graph.nodes ?? [];
+        setNodes(apiNodes.map((node, index) => {
+          const path = node.path || node.id;
+          const lower = path.toLowerCase();
+          const category: GraphNode['category'] = lower.includes('test') ? 'test' : lower.includes('api') || lower.includes('route') || lower.includes('controller') ? 'api' : lower.includes('db') || lower.includes('model') || lower.includes('store') ? 'storage' : 'core';
+          const columns = Math.max(1, Math.ceil(Math.sqrt(apiNodes.length)));
+          return { id: node.id, label: node.label || path.split('/').pop() || node.id, subLabel: path, category,
+            risk: (node.blast_radius_score ?? 0) >= 76 ? 'critical' : (node.blast_radius_score ?? 0) >= 51 ? 'high' : (node.blast_radius_score ?? 0) >= 26 ? 'medium' : 'low',
+            x: 110 + (index % columns) * 180, y: 100 + Math.floor(index / columns) * 115,
+            metrics: { loc: node.lines_of_code, afferentCoupling: node.in_degree, efferentCoupling: node.out_degree } };
+        }));
+        setLinks(
+          (graph.edges ?? []).map((e) => ({
+            source: e.source,
+            target: e.target,
+            type: (e.edge_type as GraphLink['type']) || 'calls',
+            isCritical: e.weight > 5,
+          }))
+        );
+        setLoadState(apiNodes.length ? 'ready' : 'empty');
+      }).catch((err) => {
+        console.warn('Graph fetch failed:', err);
+        setNodes([]);
+        setLinks([]);
+        setGraphData(null);
+        setLoadState('error');
+      });
+      analysisService.getUml(currentAnalysisId).then(setUml).catch(() => setUml(null));
+    } else {
+      setNodes([]);
+      setLinks([]);
+      setGraphData(null);
+      setUml(null);
+      setLoadState('empty');
+    }
+  }, [currentAnalysisId]);
 
   return (
     <div className="space-y-space-lg">
@@ -72,16 +110,16 @@ export const ArchitecturePage: React.FC = () => {
           <span className="text-outline text-xs uppercase font-label-caps font-semibold">
             Circular Leak Cycles
           </span>
-          <div className="text-2xl font-bold font-code text-amber-400 mt-1">1 cycle</div>
-          <div className="text-xs text-amber-400 font-code mt-0.5">tokens.py ↔ session.py</div>
+          <div className="text-2xl font-bold font-code text-amber-400 mt-1">{graphData?.has_cycles ? graphData.cycles.length : 0} cycle(s)</div>
+          <div className="text-xs text-amber-400 font-code mt-0.5">{graphData?.has_cycles ? "Cyclic dependencies detected" : "No cycles"}</div>
         </div>
 
         <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high">
           <span className="text-outline text-xs uppercase font-label-caps font-semibold">
-            Instability Average
+            Network Density
           </span>
-          <div className="text-2xl font-bold font-code text-primary-container mt-1">0.48</div>
-          <div className="text-xs text-outline font-code mt-0.5">Balanced package coupling</div>
+          <div className="text-2xl font-bold font-code text-primary-container mt-1">{graphData?.density ? graphData.density.toFixed(2) : '0.00'}</div>
+          <div className="text-xs text-outline font-code mt-0.5">Edge to node ratio</div>
         </div>
       </div>
 
@@ -106,7 +144,16 @@ export const ArchitecturePage: React.FC = () => {
           onNodeSelect={setSelectedNode}
           selectedNodeId={selectedNode?.id}
         />
+        {loadState === 'loading' && <p className="text-xs font-code text-outline">Loading architecture analysis…</p>}
+        {loadState === 'error' && <p className="text-xs font-code text-error">Architecture data could not be loaded for this analysis.</p>}
       </div>
+
+      {uml && (
+        <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high space-y-2">
+          <div className="text-xs uppercase font-label-caps text-outline">Generated UML ({uml.total_nodes} nodes, {uml.total_edges} relationships)</div>
+          <pre className="max-h-64 overflow-auto rounded-lg bg-surface-container-lowest p-3 text-xs font-code text-on-surface">{uml.plantuml_source}</pre>
+        </div>
+      )}
 
       {/* Architectural Layer Breakdown Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-space-md pt-2">
