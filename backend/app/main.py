@@ -32,6 +32,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         is_connected, error = check_db_connectivity()
         if is_connected:
             logger.info("Database connection established successfully.")
+            try:
+                from app.db.apply_migrations import apply_migrations
+                apply_migrations()
+            except Exception as e:
+                logger.warning("Startup migration check encountered notice: %s", e)
         else:
             logger.warning("Database configured but connectivity check failed: %s", error)
     else:

@@ -76,7 +76,7 @@ export const IngestRepoPage: React.FC = () => {
 
     try {
       if (activeTab === 'url' && repoUrl.startsWith('http')) {
-        const result = await repoService.ingestGithub(repoUrl);
+        const result = await repoService.ingestGithub(repoUrl, token);
         if (result && result.repository) {
           await refreshRepositories();
           setActiveRepoId(result.repository.id);

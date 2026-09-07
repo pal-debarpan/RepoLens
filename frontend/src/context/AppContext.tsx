@@ -1,10 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { Repository, ThemeMode } from '../types';
-import { repoService } from '../services/api';
+import { repoService, clearAuthToken, setAuthToken } from '../services/api';
 import { MOCK_REPOSITORIES } from '../services/mockData';
-import { AppContext } from './appContextDefinition';
+import { AppContext, UserProfile } from './appContextDefinition';
+import { supabase } from '../services/supabaseClient';
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUserState] = useState<UserProfile | null>(() => {
+    try {
+      const saved = localStorage.getItem('repolens_user_profile');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  const setUser = (newUser: UserProfile | null) => {
+    setUserState(newUser);
+    if (newUser) {
+      localStorage.setItem('repolens_user_profile', JSON.stringify(newUser));
+    } else {
+      localStorage.removeItem('repolens_user_profile');
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // ignore
+    }
+    clearAuthToken();
+    setUser(null);
+    setRepositories([MOCK_REPOSITORIES[0]]);
+    setActiveRepoId('repolens-demo');
+    window.location.href = '/login';
+  };
+
   const [repositories, setRepositories] = useState<Repository[]>(() => MOCK_REPOSITORIES);
   const [activeRepoId, setActiveRepoId] = useState<string>('repolens-demo');
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -29,8 +62,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Sync Supabase Auth Session on mount and on auth state change
   useEffect(() => {
-    refreshRepositories();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && session.user) {
+        setAuthToken(session.access_token);
+        const email = session.user.email || '';
+        const displayName =
+          session.user.user_metadata?.display_name ||
+          session.user.user_metadata?.full_name ||
+          email.split('@')[0] ||
+          'Developer';
+        const provider = session.user.app_metadata?.provider || 'email';
+
+        setUser({ email, displayName, provider });
+        refreshRepositories();
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session && session.user) {
+        setAuthToken(session.access_token);
+        const email = session.user.email || '';
+        const displayName =
+          session.user.user_metadata?.display_name ||
+          session.user.user_metadata?.full_name ||
+          email.split('@')[0] ||
+          'Developer';
+        const provider = session.user.app_metadata?.provider || 'email';
+
+        setUser({ email, displayName, provider });
+        refreshRepositories();
+      } else if (_event === 'SIGNED_OUT') {
+        clearAuthToken();
+        setUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const activeRepo = repositories.find((r) => r.id === activeRepoId) || repositories[0];
@@ -89,6 +162,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
+        user,
+        setUser,
+        signOut,
         activeRepoId,
         setActiveRepoId,
         activeRepo,

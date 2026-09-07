@@ -8,6 +8,7 @@ from app.models.repository import SourceType
 
 class RepositoryBase(BaseModel):
     source_url: str = Field(..., description="The URL of the repository source.")
+    user_id: Optional[UUID] = Field(None, description="The owner user ID.")
     name: Optional[str] = Field(None, description="The name or identifier of the repository.")
     default_branch: Optional[str] = None
     primary_language: Optional[str] = None
@@ -24,7 +25,7 @@ class RepositoryCreate(RepositoryBase):
     @model_validator(mode='after')
     def validate_github_url(self) -> "RepositoryCreate":
         if self.source_type == SourceType.github:
-            if not self.source_url.startswith("https://github.com/"):
+            if not (self.source_url.startswith("https://github.com/") or self.source_url.startswith("http://github.com/")):
                 raise ValueError("GitHub source_url must start with https://github.com/")
         return self
 

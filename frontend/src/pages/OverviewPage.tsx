@@ -5,45 +5,64 @@ import { ScoreGauge } from '../components/common/ScoreGauge';
 import { StatusPill } from '../components/common/StatusPill';
 
 export const OverviewPage: React.FC = () => {
-  const { activeRepo, repositories, setActiveRepoId } = useApp();
+  const { user, signOut, activeRepo, repositories, setActiveRepoId } = useApp();
   const navigate = useNavigate();
+
+  const userDisplayName = user?.displayName || user?.email?.split('@')[0] || 'Developer';
+  const userEmail = user?.email || 'developer@repolens.io';
+  const userProvider = user?.provider || 'authenticated';
 
   return (
     <div className="space-y-space-xl">
       {/* Welcome Banner / Workspace Telemetry Header */}
       <div className="p-space-lg rounded-2xl bg-gradient-to-r from-surface-container-low via-surface-container to-surface-container-high border border-surface-container-highest flex flex-col md:flex-row md:items-center justify-between gap-space-lg shadow-lg relative overflow-hidden">
         <div className="space-y-2 z-10">
-          <div className="flex items-center gap-space-xs">
+          <div className="flex items-center gap-space-xs flex-wrap">
             <span className="font-label-caps text-label-caps px-space-xs py-space-2xs rounded bg-primary-container text-on-primary-container font-mono font-bold">
               WORKSPACE RADAR
             </span>
             <span className="text-xs font-code text-outline">
-              Context: <strong className="text-on-surface">{activeRepo?.name}</strong> ({activeRepo?.branch})
+              User: <strong className="text-on-surface">{userDisplayName}</strong> ({userEmail})
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-surface-container-highest text-primary-fixed-dim border border-primary-container/30 uppercase">
+              {userProvider}
             </span>
           </div>
+
           <h1 className="font-headline-xl text-headline-xl text-on-surface font-bold">
             Repository Intelligence &amp; Blast Control
           </h1>
           <p className="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-            Continuous topological analysis across <strong className="text-on-surface">{repositories.length} repositories</strong>.
-            Detecting architectural debt, breaking API boundaries, and change blast radius before production deployment.
+            Active workspace with <strong className="text-on-surface">{repositories.length} monitored repositories</strong>.
+            User-isolated AST parsing, architectural blast simulations, and continuous security auditing.
           </p>
         </div>
 
         <div className="flex items-center gap-space-sm z-10 self-start md:self-auto flex-wrap">
           <button
-            onClick={() => navigate('/blast-radius')}
+            onClick={() => navigate('/ingest')}
             className="inline-flex items-center gap-space-xs px-space-md py-space-sm rounded-lg bg-primary-container hover:bg-primary-fixed-dim text-on-primary-container font-headline-sm text-body-sm font-semibold transition-all shadow-glow-lime"
           >
-            <span className="material-symbols-outlined text-[18px]">radar</span>
-            <span>Simulate Blast Radius</span>
+            <span className="material-symbols-outlined text-[18px]">add_link</span>
+            <span>Ingest Repository</span>
           </button>
+          
           <button
-            onClick={() => navigate('/repositories/connect')}
+            onClick={() => navigate('/blast-radius')}
             className="inline-flex items-center gap-space-xs px-space-md py-space-sm rounded-lg bg-surface-container-highest hover:bg-surface-bright text-on-surface font-headline-sm text-body-sm font-semibold transition-colors"
           >
-            <span className="material-symbols-outlined text-[18px]">add</span>
-            <span>Connect Repo</span>
+            <span className="material-symbols-outlined text-[18px]">radar</span>
+            <span>Simulate Blast</span>
+          </button>
+
+          {/* Sign Out Button in Header Card */}
+          <button
+            onClick={signOut}
+            className="inline-flex items-center gap-space-xs px-space-md py-space-sm rounded-lg bg-error-container/20 hover:bg-error-container/40 text-error border border-error/30 font-headline-sm text-body-sm font-semibold transition-colors"
+            title="Sign out of current account"
+          >
+            <span className="material-symbols-outlined text-[18px]">logout</span>
+            <span>Sign Out</span>
           </button>
         </div>
 
@@ -62,13 +81,13 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="flex flex-col min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-bold text-sm text-error">14 Active Blast Vectors in Critical Path</span>
+              <span className="font-bold text-sm text-error">Active Blast Simulation on {activeRepo?.name || 'Codebase'}</span>
               <span className="font-code text-[11px] px-1.5 py-0.2 rounded bg-error/30 text-error font-mono">
-                HIGH RIPPLE
+                {activeRepo?.riskLevel || 'MODERATE'}
               </span>
             </div>
             <p className="text-xs text-on-surface-variant truncate mt-0.5">
-              Refactoring <code className="font-code text-on-surface">services/auth_service.py</code> cascades into 4 API endpoints and 7 test suites.
+              Refactoring <code className="font-code text-on-surface">paymentService.js</code> cascades into 11 downstream files including 2 API endpoints.
             </p>
           </div>
         </div>
@@ -89,7 +108,7 @@ export const OverviewPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">
-              Fleet Health Index
+              Quality Score
             </span>
             <span className="material-symbols-outlined text-primary-container text-[20px]">
               insights
@@ -98,14 +117,14 @@ export const OverviewPage: React.FC = () => {
           <div className="mt-3 flex items-center justify-between">
             <div>
               <div className="text-3xl font-bold font-code text-on-surface">
-                {activeRepo?.score ?? 76}
+                {activeRepo?.score ?? 82}
                 <span className="text-xs font-normal text-outline">/100</span>
               </div>
               <div className="text-xs text-primary-fixed-dim font-code mt-0.5">
-                {activeRepo?.riskLevel}
+                {activeRepo?.riskLevel || 'Moderate Risk'}
               </div>
             </div>
-            <ScoreGauge score={activeRepo?.score ?? 76} size="md" showLabel={false} />
+            <ScoreGauge score={activeRepo?.score ?? 82} size="md" showLabel={false} />
           </div>
         </div>
 
@@ -123,10 +142,10 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-3xl font-bold font-code text-error">
-              {activeRepo?.openIssuesCount ?? 8}
+              {activeRepo?.openIssuesCount ?? 3}
             </div>
             <div className="text-xs text-error font-code mt-0.5">
-              2 Critical (CWE-78, CWE-798)
+              1 Critical Secret &bull; 1 Cycle
             </div>
           </div>
         </div>
@@ -137,7 +156,7 @@ export const OverviewPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">
-              Graph Entities
+              AST Graph Nodes
             </span>
             <span className="material-symbols-outlined text-secondary text-[20px]">
               hub
@@ -145,10 +164,10 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-3xl font-bold font-code text-secondary">
-              4,210
+              {activeRepo?.filesCount ? activeRepo.filesCount * 4 : 48}
             </div>
             <div className="text-xs text-outline font-code mt-0.5">
-              18,920 AST topological edges
+              Cross-module imports resolved
             </div>
           </div>
         </div>
@@ -159,7 +178,7 @@ export const OverviewPage: React.FC = () => {
         >
           <div className="flex items-center justify-between">
             <span className="text-outline text-xs uppercase font-label-caps font-semibold">
-              Test Coverage
+              Test Recommendations
             </span>
             <span className="material-symbols-outlined text-primary-container text-[20px]">
               checklist
@@ -167,25 +186,25 @@ export const OverviewPage: React.FC = () => {
           </div>
           <div className="mt-3">
             <div className="text-3xl font-bold font-code text-primary-container">
-              {activeRepo?.testCoverage ?? 84.5}%
+              {activeRepo?.testCoverage ?? 76.5}%
             </div>
             <div className="text-xs text-primary-container font-code mt-0.5">
-              4 targeted test suites ready
+              Downstream blast tests mapped
             </div>
           </div>
         </div>
       </div>
 
-      {/* 2-Column Section: Fleet Repositories & Quick Actions */}
+      {/* 2-Column Section: Monitored Codebases & Launchpad */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg">
-        {/* Left 7 Cols: Monitored Repositories Snapshot */}
+        {/* Left 7 Cols: Monitored Repositories */}
         <div className="lg:col-span-7 space-y-space-md">
           <div className="flex items-center justify-between">
             <h2 className="font-headline-md text-headline-md text-on-surface font-semibold flex items-center gap-2">
               <span className="material-symbols-outlined text-primary-container text-[20px]">
                 folder_data
               </span>
-              Monitored Codebases ({repositories.length})
+              User Codebases ({repositories.length})
             </h2>
             <button
               onClick={() => navigate('/repositories')}
@@ -245,7 +264,7 @@ export const OverviewPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right 5 Cols: Quick Navigation & Intelligence Tools */}
+        {/* Right 5 Cols: Quick Tools & Account Info */}
         <div className="lg:col-span-5 space-y-space-md">
           <h2 className="font-headline-md text-headline-md text-on-surface font-semibold flex items-center gap-2">
             <span className="material-symbols-outlined text-secondary text-[20px]">
@@ -311,27 +330,45 @@ export const OverviewPage: React.FC = () => {
                 RepoLens Code AI
               </div>
               <p className="text-xs text-outline">
-                Query AST semantic graph, auto-generate patches, and explain debt.
+                Query AST semantic graph with Gemini explanation engine.
               </p>
             </div>
           </div>
 
-          {/* Quick System Telemetry Card */}
-          <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high space-y-2">
-            <div className="flex items-center justify-between text-xs font-code">
-              <span className="text-outline uppercase font-semibold">AST Daemon Telemetry</span>
-              <span className="text-primary-container font-bold">ast-v4.9 Active</span>
+          {/* User Account & Security Card */}
+          <div className="p-space-md rounded-xl bg-surface-container-low border border-surface-container-high space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-outline uppercase font-semibold text-[10px] font-label-caps">
+                SESSION SECURITY
+              </span>
+              <span className="text-primary-container font-code text-xs font-bold">
+                Isolated Workspace
+              </span>
             </div>
-            <div className="text-xs text-on-surface-variant">
-              Memory buffer: <strong className="text-on-surface">412 MB RSS</strong> • Tokenizer throughput:{' '}
-              <strong className="text-on-surface">2,840 tok/s</strong>
+            
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-lg bg-surface-container-high flex items-center justify-center font-code text-xs font-bold text-primary-container border border-surface-container-highest flex-shrink-0">
+                  {userDisplayName.substring(0, 2).toUpperCase()}
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="font-semibold text-xs text-on-surface truncate">
+                    {userDisplayName}
+                  </span>
+                  <span className="text-[11px] font-code text-outline truncate">
+                    {userEmail}
+                  </span>
+                </div>
+              </div>
+
+              <button
+                onClick={signOut}
+                className="px-3 py-1.5 rounded-lg bg-error-container/20 hover:bg-error-container/40 text-error border border-error/30 text-xs font-code font-semibold transition-colors flex items-center gap-1.5 flex-shrink-0"
+              >
+                <span className="material-symbols-outlined text-[14px]">logout</span>
+                <span>Sign Out</span>
+              </button>
             </div>
-            <button
-              onClick={() => navigate('/progress')}
-              className="text-xs font-code text-primary-container hover:underline block pt-1"
-            >
-              Open Live Pipeline Streamer →
-            </button>
           </div>
         </div>
       </div>

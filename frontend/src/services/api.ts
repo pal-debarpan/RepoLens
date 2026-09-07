@@ -24,7 +24,8 @@ import {
   ChatMessage,
 } from '../types';
 
-const API_BASE = '/api/v1';
+const RAW_API_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE = RAW_API_URL ? `${RAW_API_URL.replace(/\/$/, '')}/api/v1` : '/api/v1';
 export const DEMO_ANALYSIS_ID = '545b844d-271b-566a-be6a-71a00c89c96c';
 export const DEMO_REPO_ID = 'f954f68f-adf2-50cb-9300-d8c076a5263a';
 
@@ -33,17 +34,46 @@ const repoAnalysisCache = new Map<string, string>();
 repoAnalysisCache.set('repolens-demo', DEMO_ANALYSIS_ID);
 repoAnalysisCache.set(DEMO_REPO_ID, DEMO_ANALYSIS_ID);
 
+let currentAuthToken: string | null = null;
+
+export const setAuthToken = (token: string | null) => {
+  currentAuthToken = token;
+  if (token) {
+    localStorage.setItem('repolens_access_token', token);
+  } else {
+    localStorage.removeItem('repolens_access_token');
+  }
+};
+
+export const getAuthToken = (): string | null => {
+  if (currentAuthToken) return currentAuthToken;
+  const stored =
+    localStorage.getItem('repolens_access_token') ||
+    localStorage.getItem('sb-access-token');
+  return stored || null;
+};
+
+export const clearAuthToken = () => {
+  currentAuthToken = null;
+  localStorage.removeItem('repolens_access_token');
+  localStorage.removeItem('sb-access-token');
+};
+
 /**
- * Helper to safely make HTTP requests with automatic JSON parsing and fallback.
+ * Helper to safely make HTTP requests with automatic JSON parsing, JWT header injection, and fallback.
  */
 async function fetchApi<T>(path: string, options?: RequestInit): Promise<T | null> {
   try {
+    const token = getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...((options?.headers as Record<string, string>) || {}),
+    };
+
     const res = await fetch(`${API_BASE}${path}`, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(options?.headers || {}),
-      },
       ...options,
+      headers,
     });
     if (!res.ok) {
       console.warn(`API request to ${path} failed:`, res.status, res.statusText);
@@ -182,8 +212,13 @@ export const repoService = {
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const token = getAuthToken();
+      const headers: Record<string, string> = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
       const res = await fetch(`${API_BASE}/repositories/upload`, {
         method: 'POST',
+        headers,
         body: formData,
       });
       if (!res.ok) return null;
@@ -447,6 +482,7 @@ export const userService = {
     opts?: { displayName?: string; avatarUrl?: string; provider?: string }
   ): Promise<{ id: string; email: string } | null> => {
     try {
+      setAuthToken(accessToken);
       const res = await fetch(`${API_BASE}/users/me`, {
         method: 'POST',
         headers: {
@@ -473,10 +509,12 @@ export const userService = {
   /**
    * Fetch the current user's stored profile (requires auth token).
    */
-  getProfile: async (accessToken: string): Promise<any | null> => {
+  getProfile: async (accessToken?: string): Promise<any | null> => {
     try {
+      const token = accessToken || getAuthToken();
+      if (!token) return null;
       const res = await fetch(`${API_BASE}/users/me`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) return null;
       return await res.json();

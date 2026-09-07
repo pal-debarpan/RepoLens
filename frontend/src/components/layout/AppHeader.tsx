@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState, useRef, useEffect } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { useApp } from '../../context';
 
 export const AppHeader: React.FC = () => {
   const {
+    user,
+    signOut,
     activeRepo,
     repositories,
     setActiveRepoId,
@@ -14,13 +16,28 @@ export const AppHeader: React.FC = () => {
     setSidebarCollapsed,
   } = useApp();
   const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close user dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getPageTitle = () => {
     const path = location.pathname;
-    if (path === '/' || path === '/overview') return 'Workspace Overview';
+    if (path === '/' || path === '/overview' || path === '/app') return 'Workspace Overview';
     if (path.startsWith('/repositories/connect')) return 'Connect Repository';
     if (path.startsWith('/repositories')) return 'Fleet Inventory';
+    if (path.startsWith('/ingest')) return 'Ingest Codebase';
     if (path.startsWith('/progress')) return 'Pipeline Telemetry';
     if (path.startsWith('/architecture')) return 'Architecture Topology';
     if (path.startsWith('/security')) return 'Security Analysis';
@@ -35,6 +52,13 @@ export const AppHeader: React.FC = () => {
     if (path.startsWith('/settings')) return 'Application Settings';
     return 'RepoLens';
   };
+
+  const userInitials = (user?.displayName || user?.email || 'Developer')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
 
   return (
     <header
@@ -150,11 +174,90 @@ export const AppHeader: React.FC = () => {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-error ring-2 ring-surface-container-lowest" />
         </button>
 
-        {/* User Profile Avatar */}
-        <div className="flex items-center gap-2 pl-2 border-l border-surface-container-high">
-          <div className="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center font-code text-xs font-bold text-primary-container border border-surface-container-highest">
-            RL
-          </div>
+        {/* User Profile Avatar with Dropdown */}
+        <div className="relative pl-2 border-l border-surface-container-high" ref={userDropdownRef}>
+          <button
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            className="flex items-center gap-2 p-1 rounded-lg hover:bg-surface-container transition-colors"
+            title="User Account Menu"
+          >
+            <div className="w-8 h-8 rounded-lg bg-primary-container/20 text-primary-container border border-primary-container/40 flex items-center justify-center font-code text-xs font-bold shadow-sm">
+              {userInitials}
+            </div>
+            <span className="material-symbols-outlined text-[16px] text-outline hidden md:block">
+              expand_more
+            </span>
+          </button>
+
+          {userDropdownOpen && (
+            <div className="absolute right-0 mt-2 w-64 rounded-xl bg-surface-container-low border border-surface-container-highest shadow-2xl py-2 z-50 animate-scale-up">
+              {/* User Details */}
+              <div className="px-4 py-2 border-b border-surface-container-highest">
+                <div className="font-semibold text-xs text-on-surface truncate">
+                  {user?.displayName || 'Developer'}
+                </div>
+                <div className="text-[11px] font-code text-outline truncate">
+                  {user?.email || 'developer@repolens.io'}
+                </div>
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-primary-container" />
+                  <span className="text-[10px] font-code text-primary-fixed-dim uppercase tracking-wider">
+                    {user?.provider || 'Active'} Tenant
+                  </span>
+                </div>
+              </div>
+
+              {/* Menu Links */}
+              <div className="py-1">
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    navigate('/app');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-xs text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-outline">dashboard</span>
+                  <span>Workspace Dashboard</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    navigate('/repositories');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-xs text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-outline">folder_data</span>
+                  <span>Fleet Inventory</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    navigate('/settings');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-xs text-on-surface hover:bg-surface-container transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-outline">settings</span>
+                  <span>Settings &amp; Keys</span>
+                </button>
+              </div>
+
+              {/* Sign Out Action */}
+              <div className="pt-1 mt-1 border-t border-surface-container-highest">
+                <button
+                  onClick={() => {
+                    setUserDropdownOpen(false);
+                    signOut();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-left text-xs text-error hover:bg-error-container/20 font-semibold transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-error">logout</span>
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

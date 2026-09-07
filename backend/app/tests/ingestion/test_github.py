@@ -17,10 +17,12 @@ def test_ingest_github_invalid_url():
     with pytest.raises(SecurityError):
         ingest_github_repo("https://evil.com/org/repo")
 
+@patch('app.ingestion.github._check_github_repo_access')
 @patch('app.ingestion.github.subprocess.run')
 @patch('app.ingestion.github._calculate_repo_stats')
 @patch('app.ingestion.github._get_default_branch')
-def test_ingest_github_success(mock_branch, mock_stats, mock_run):
+def test_ingest_github_success(mock_branch, mock_stats, mock_run, mock_access):
+    mock_access.return_value = {"full_name": "testorg/testrepo", "default_branch": "main"}
     mock_run.return_value = MagicMock(returncode=0)
     mock_stats.return_value = (10, 1024)
     mock_branch.return_value = "main"
@@ -33,22 +35,28 @@ def test_ingest_github_success(mock_branch, mock_stats, mock_run):
     assert repo.total_size_bytes == 1024
     assert mock_run.called
 
+@patch('app.ingestion.github._check_github_repo_access')
 @patch('app.ingestion.github.subprocess.run')
-def test_ingest_github_clone_failure(mock_run):
+def test_ingest_github_clone_failure(mock_run, mock_access):
+    mock_access.return_value = {"full_name": "testorg/testrepo"}
     mock_run.return_value = MagicMock(returncode=128, stderr="Repository not found")
 
-    with pytest.raises(IngestionError, match="Repository not found or is private"):
+    with pytest.raises(IngestionError, match="Repository not found or access was denied"):
         ingest_github_repo("https://github.com/testorg/testrepo")
 
+@patch('app.ingestion.github._check_github_repo_access')
 @patch('app.ingestion.github.subprocess.run')
-def test_ingest_github_generic_failure(mock_run):
+def test_ingest_github_generic_failure(mock_run, mock_access):
+    mock_access.return_value = {"full_name": "testorg/testrepo"}
     mock_run.return_value = MagicMock(returncode=1, stderr="fatal: some other git error")
 
-    with pytest.raises(IngestionError, match="Git clone failed for repository"):
+    with pytest.raises(IngestionError, match="Git clone failed"):
         ingest_github_repo("https://github.com/testorg/testrepo")
 
+@patch('app.ingestion.github._check_github_repo_access')
 @patch('app.ingestion.github.subprocess.run')
-def test_ingest_github_timeout(mock_run):
+def test_ingest_github_timeout(mock_run, mock_access):
+    mock_access.return_value = {"full_name": "testorg/testrepo"}
     mock_run.side_effect = subprocess.TimeoutExpired(cmd="git", timeout=60)
 
     with pytest.raises(ResourceLimitError, match="Git clone timed out"):

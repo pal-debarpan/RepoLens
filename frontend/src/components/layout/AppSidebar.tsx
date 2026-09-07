@@ -4,8 +4,15 @@ import { RepoLensLogo } from '../common/RepoLensLogo';
 import { useApp } from '../../context';
 
 export const AppSidebar: React.FC = () => {
-  const { repositories, sidebarCollapsed, setSidebarCollapsed } = useApp();
+  const { user, signOut, repositories, sidebarCollapsed, setSidebarCollapsed } = useApp();
   const location = useLocation();
+
+  const userInitials = (user?.displayName || user?.email || 'Developer')
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
 
   const navGroups = [
     {
@@ -97,8 +104,8 @@ export const AppSidebar: React.FC = () => {
             )}
             {group.items.map((item) => {
               const isActive =
-                item.to === '/'
-                  ? location.pathname === '/' || location.pathname === '/overview'
+                item.to === '/' || item.to === '/app'
+                  ? location.pathname === '/' || location.pathname === '/overview' || location.pathname === '/app'
                   : location.pathname.startsWith(item.to);
 
               return (
@@ -146,24 +153,42 @@ export const AppSidebar: React.FC = () => {
         ))}
       </div>
 
-      {/* Footer System Status Card */}
-      {!sidebarCollapsed && (
-        <div className="p-3 border-t border-surface-container-high">
-          <div className="p-2.5 rounded-lg bg-surface-container-low border border-surface-container flex flex-col gap-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-label-caps text-outline uppercase font-semibold">
-                AST ENGINE
-              </span>
-              <span className="text-[10px] font-code text-primary-container">
-                v4.9 ACTIVE
-              </span>
+      {/* User Session & Sign Out Footer */}
+      <div className="p-3 border-t border-surface-container-high bg-surface-container-low/40">
+        {!sidebarCollapsed ? (
+          <div className="flex items-center justify-between gap-2 p-2 rounded-xl bg-surface-container-low border border-surface-container-highest">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-primary-container/20 text-primary-container border border-primary-container/40 flex items-center justify-center font-code text-xs font-bold flex-shrink-0">
+                {userInitials}
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="font-semibold text-xs text-on-surface truncate">
+                  {user?.displayName || 'Developer'}
+                </span>
+                <span className="text-[10px] font-code text-outline truncate">
+                  {user?.email || 'developer@repolens.io'}
+                </span>
+              </div>
             </div>
-            <div className="text-[11px] text-on-surface-variant truncate">
-              Context: <span className="font-code text-on-surface">repolens-demo</span>
-            </div>
+
+            <button
+              onClick={signOut}
+              title="Sign Out of Session"
+              className="p-1.5 rounded-lg text-outline hover:text-error hover:bg-error-container/20 transition-colors flex-shrink-0"
+            >
+              <span className="material-symbols-outlined text-[18px]">logout</span>
+            </button>
           </div>
-        </div>
-      )}
+        ) : (
+          <button
+            onClick={signOut}
+            title="Sign Out"
+            className="w-full flex items-center justify-center p-2 rounded-lg text-outline hover:text-error hover:bg-error-container/20 transition-colors"
+          >
+            <span className="material-symbols-outlined text-[20px]">logout</span>
+          </button>
+        )}
+      </div>
     </aside>
   );
 };

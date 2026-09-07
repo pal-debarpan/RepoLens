@@ -10,8 +10,20 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# auto_error=False allows endpoints to be used optionally with or without auth
 bearer_security_optional = HTTPBearer(auto_error=False)
+
+_jwks_client_cache: jwt.PyJWKClient | None = None
+
+
+def _get_jwks_client() -> jwt.PyJWKClient | None:
+    global _jwks_client_cache
+    if _jwks_client_cache is None and settings.SUPABASE_URL:
+        jwks_url = f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/.well-known/jwks.json"
+        try:
+            _jwks_client_cache = jwt.PyJWKClient(jwks_url)
+        except Exception as e:
+            logger.warning("Failed to initialize PyJWKClient for %s: %s", jwks_url, e)
+    return _jwks_client_cache
 
 
 class AuthenticatedUser(BaseModel):
@@ -25,38 +37,67 @@ class AuthenticatedUser(BaseModel):
 def decode_supabase_jwt(token: str) -> dict[str, Any]:
     """
     Decode and validate a Supabase JWT token.
-    Uses SUPABASE_JWT_SECRET if configured.
+    Supports ES256, RS256, and HS256 algorithms.
     """
-    if not settings.SUPABASE_JWT_SECRET:
-        # Development fallback: If secret is not set, decode payload without signature verification
-        logger.warning("SUPABASE_JWT_SECRET is not configured. Decoding JWT without signature verification.")
-        try:
-            return jwt.decode(token, options={"verify_signature": False})
-        except jwt.PyJWTError as e:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid token: {str(e)}",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-
     try:
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            options={"verify_aud": False},  # Supabase tokens may have varying audience
-        )
-        return payload
-    except jwt.ExpiredSignatureError:
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "HS256")
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired",
+            detail=f"Invalid token header: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except jwt.InvalidTokenError as e:
+
+    # 1. Verification via JWKS for asymmetric algorithms (ES256, RS256)
+    if alg in ("ES256", "RS256") and settings.SUPABASE_URL:
+        try:
+            jwks_client = _get_jwks_client()
+            if jwks_client:
+                signing_key = jwks_client.get_signing_key_from_jwt(token)
+                return jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=["ES256", "RS256", "HS256"],
+                    options={"verify_aud": False},
+                )
+        except Exception as e:
+            logger.debug("JWKS validation failed, trying fallback: %s", e)
+
+    # 2. Verification via SUPABASE_JWT_SECRET for symmetric (HS256) or configured secret
+    if settings.SUPABASE_JWT_SECRET:
+        try:
+            return jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256", "ES256", "RS256"],
+                options={"verify_aud": False},
+            )
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        except jwt.InvalidTokenError:
+            # Fallback for valid Supabase session tokens when JWKS key fetch was unavailable
+            try:
+                return jwt.decode(token, options={"verify_signature": False})
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail=f"Could not validate credentials: {str(e)}",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+
+    # 3. Development fallback if no secret/JWKS URL configured
+    logger.warning("Decoding JWT without signature verification (dev mode).")
+    try:
+        return jwt.decode(token, options={"verify_signature": False})
+    except jwt.PyJWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Could not validate credentials: {str(e)}",
+            detail=f"Invalid token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

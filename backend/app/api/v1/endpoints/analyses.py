@@ -34,24 +34,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-# ─── Demo Detection ────────────────────────────────────────────────────────────
+# ─── Demo Detection & Scoped Analysis Retrieval ───────────────────────────────
 
 def _is_demo(analysis_id: uuid.UUID) -> bool:
     return analysis_id == DEMO_ANALYSIS_ID
 
 
-def _get_analysis_or_404(db: Session, analysis_id: uuid.UUID) -> Analysis:
+def _get_analysis_or_404(
+    db: Session,
+    analysis_id: uuid.UUID,
+    user_id: Optional[uuid.UUID] = None,
+) -> Analysis:
+    """
+    Retrieve an analysis and enforce tenant / user isolation.
+    Returns 404 if the analysis does not exist or belongs to another user.
+    """
     analysis = db.get(Analysis, analysis_id)
     if not analysis:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    
+    # If analysis has an explicit owner, verify ownership
+    if analysis.user_id is not None:
+        if user_id is None or analysis.user_id != user_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    else:
+        # Check parent repository ownership
+        repo = db.get(Repository, analysis.repository_id)
+        if repo and repo.user_id is not None:
+            if user_id is None or repo.user_id != user_id:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+
     return analysis
-
-
-def _get_analysis_or_demo(db: Session, analysis_id: uuid.UUID) -> Analysis | None:
-    """Returns Analysis or None if it's the demo fixture."""
-    if _is_demo(analysis_id):
-        return None
-    return _get_analysis_or_404(db, analysis_id)
 
 
 # ─── POST /analyses ─────────────────────────────────────────────────────────────
@@ -63,9 +76,8 @@ def _get_analysis_or_demo(db: Session, analysis_id: uuid.UUID) -> Analysis | Non
     summary="Trigger a new analysis",
     description=(
         "Triggers a new asynchronous analysis pipeline for a repository. "
-        "Any authenticated or anonymous user can analyze any public repository — "
-        "repository ownership is NOT required. "
-        "Authenticated analyses are linked to the user's history."
+        "User ownership is validated — users can only trigger analysis on their own repositories or public demo fixtures. "
+        "Authenticated analyses are linked to the user's workspace history."
     ),
 )
 def create_analysis(
@@ -74,9 +86,17 @@ def create_analysis(
     db: Session = Depends(get_db),
     current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
 ) -> AnalysisResponse:
-    # Verify repository exists
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+
+    # Verify repository exists and belongs to current user
     repo = db.get(Repository, body.repository_id)
     if not repo:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository {body.repository_id} not found",
+        )
+
+    if repo.user_id is not None and (user_id is None or repo.user_id != user_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository {body.repository_id} not found",
@@ -89,7 +109,6 @@ def create_analysis(
         )
 
     # Create analysis record
-    user_id = uuid.UUID(str(current_user.id)) if current_user else None
     analysis = Analysis(
         repository_id=body.repository_id,
         user_id=user_id,
@@ -100,7 +119,7 @@ def create_analysis(
     db.commit()
     db.refresh(analysis)
 
-    # Run pipeline in background thread (prototype-appropriate; production would use task queue)
+    # Run pipeline in background thread
     analysis_id = analysis.id
     workspace_path = repo.workspace_path
 
@@ -159,7 +178,8 @@ def get_analysis(
     if _is_demo(analysis_id):
         return get_demo_analysis()
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
 
     # Assemble detail with nested data from JSON columns
     from app.schemas.graph import GraphResponse
@@ -223,9 +243,6 @@ def get_blast_radius(
     if _is_demo(analysis_id):
         if "payment" in file_path.lower():
             return DEMO_BLAST_RADIUS
-        # Build partial demo response for other files
-        demo = get_demo_analysis()
-        demo_graph = DEMO_GRAPH
         return BlastRadiusResponse(
             target_file=file_path,
             score=15.0,
@@ -237,7 +254,8 @@ def get_blast_radius(
             test_targets=[],
         )
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
     if analysis.status != AnalysisStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -277,7 +295,8 @@ def get_graph(
     if _is_demo(analysis_id):
         return DEMO_GRAPH
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
     if not analysis.graph_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Graph not yet available")
 
@@ -300,7 +319,6 @@ def get_file_graph(
     current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
 ) -> FileGraphResponse:
     if _is_demo(analysis_id):
-        # Build subgraph from demo data
         import networkx as nx
         G = nx.DiGraph()
         for node in DEMO_GRAPH.nodes:
@@ -310,7 +328,8 @@ def get_file_graph(
             G.add_edge(edge.source, edge.target)
         return graph_svc.get_file_subgraph(G, file_path, depth)
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
     if not analysis.graph_data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Graph not yet available")
 
@@ -356,7 +375,8 @@ def get_findings(
             results = [f for f in results if file_path in f.file_path]
         return results[offset : offset + limit]
 
-    _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    _get_analysis_or_404(db, analysis_id, user_id)
     query = db.query(Finding).filter(Finding.analysis_id == analysis_id)
 
     if category:
@@ -400,6 +420,8 @@ def get_finding(
                 return f
         raise HTTPException(status_code=404, detail="Finding not found")
 
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    _get_analysis_or_404(db, analysis_id, user_id)
     finding = (
         db.query(Finding)
         .filter(Finding.id == finding_id, Finding.analysis_id == analysis_id)
@@ -427,7 +449,8 @@ def get_quality(
         from app.services.demo_fixture import DEMO_QUALITY
         return DEMO_QUALITY
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
     if not analysis.quality_details:
         raise HTTPException(status_code=404, detail="Quality data not yet available")
 
@@ -450,7 +473,8 @@ def get_testing(
         from app.services.demo_fixture import DEMO_TESTING
         return DEMO_TESTING
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
     if not analysis.testing_details:
         raise HTTPException(status_code=404, detail="Testing data not yet available")
 
@@ -497,7 +521,8 @@ async def chat(
                 return res
         return get_demo_chat_response(body.message)
 
-    analysis = _get_analysis_or_404(db, analysis_id)
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
 
     # Collect findings summary for better AI grounding
     findings = (

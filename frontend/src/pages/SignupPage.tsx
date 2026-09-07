@@ -2,34 +2,108 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { RepoLensLogo } from '../components/common/RepoLensLogo';
 import { useApp } from '../context';
+import { supabase } from '../services/supabaseClient';
+import { userService, setAuthToken } from '../services/api';
 
 export const SignupPage: React.FC = () => {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useApp();
+  const { theme, toggleTheme, setUser, refreshRepositories } = useApp();
 
-  const [fullName, setFullName] = useState('Alex Vance');
-  const [email, setEmail] = useState('alex.vance@blackmesa.tech');
-  const [teamName, setTeamName] = useState('Core Architecture Guild');
-  const [password, setPassword] = useState('sUp3r-S3cur3-p@ss');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [teamName, setTeamName] = useState('');
+  const [password, setPassword] = useState('');
   const [agreed, setAgreed] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   const calculateStrength = (p: string) => {
-    if (p.length > 12) return { text: 'Strong', width: 'w-full', color: 'bg-primary-container' };
-    if (p.length > 8) return { text: 'Good', width: 'w-3/4', color: 'bg-secondary' };
-    if (p.length > 4) return { text: 'Fair', width: 'w-1/2', color: 'bg-amber-400' };
+    if (p.length >= 12) return { text: 'Strong', width: 'w-full', color: 'bg-primary-container' };
+    if (p.length >= 8) return { text: 'Good', width: 'w-3/4', color: 'bg-secondary' };
+    if (p.length >= 6) return { text: 'Fair', width: 'w-1/2', color: 'bg-amber-400' };
     return { text: 'Weak', width: 'w-1/4', color: 'bg-error' };
   };
 
   const strength = calculateStrength(password);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+    setSuccessMsg(null);
+
+    if (password.length < 6) {
+      setErrorMsg('Password must be at least 6 characters long.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
+
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: {
+            display_name: fullName,
+            team_name: teamName,
+          },
+        },
+      });
+
+      if (error) {
+        setErrorMsg(error.message || 'Registration failed. Please try again.');
+        setLoading(false);
+        return;
+      }
+
+      if (data.session && data.user) {
+        // Immediate session active (email confirmation not blocking)
+        const token = data.session.access_token;
+        setAuthToken(token);
+
+        await userService.syncUser(token, {
+          displayName: fullName || email.split('@')[0],
+          provider: 'email',
+        });
+
+        setUser({
+          email: data.user.email || email,
+          displayName: fullName || email.split('@')[0],
+          provider: 'email',
+        });
+
+        await refreshRepositories();
+        setLoading(false);
+        navigate('/ingest');
+      } else if (data.user) {
+        // Registration created, pending email confirmation
+        setSuccessMsg(
+          'Account created successfully! Please check your email inbox to confirm your account, then sign in.'
+        );
+        setLoading(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'An unexpected error occurred during registration.');
       setLoading(false);
-      navigate('/ingest');
-    }, 400);
+    }
+  };
+
+  const handleOAuthSignup = async (providerName: 'github' | 'gitlab') => {
+    setErrorMsg(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: providerName as any,
+        options: {
+          redirectTo: `${window.location.origin}/app`,
+        },
+      });
+      if (error) {
+        setErrorMsg(`OAuth failed: ${error.message}`);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'OAuth authentication error');
+    }
   };
 
   return (
@@ -65,17 +139,38 @@ export const SignupPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Feedback Messages */}
+          {errorMsg && (
+            <div className="p-3.5 rounded-lg bg-error-container/20 border border-error/50 text-error flex items-start gap-2.5 text-xs font-medium">
+              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">error</span>
+              <div className="flex-1">
+                <span className="font-bold block">Registration Error</span>
+                <span>{errorMsg}</span>
+              </div>
+            </div>
+          )}
+
+          {successMsg && (
+            <div className="p-3.5 rounded-lg bg-primary-container/20 border border-primary-container/50 text-primary-container flex items-start gap-2.5 text-xs font-medium">
+              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">check_circle</span>
+              <div className="flex-1">
+                <span className="font-bold block">Account Created</span>
+                <span>{successMsg}</span>
+              </div>
+            </div>
+          )}
+
           {/* Social OAuth Providers */}
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => navigate('/ingest')}
+              onClick={() => handleOAuthSignup('github')}
               className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
             >
               <span className="material-symbols-outlined text-[18px]">deployed_code</span>
               <span>Sign up with GitHub</span>
             </button>
             <button
-              onClick={() => navigate('/ingest')}
+              onClick={() => handleOAuthSignup('gitlab')}
               className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
             >
               <span className="material-symbols-outlined text-[18px]">merge</span>
@@ -101,6 +196,7 @@ export const SignupPage: React.FC = () => {
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Alex Vance"
                   className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
                 />
               </div>
@@ -111,9 +207,9 @@ export const SignupPage: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  required
                   value={teamName}
                   onChange={(e) => setTeamName(e.target.value)}
+                  placeholder="Core Guild"
                   className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
                 />
               </div>
@@ -128,6 +224,7 @@ export const SignupPage: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                placeholder="developer@company.com"
                 className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
               />
             </div>
@@ -141,6 +238,7 @@ export const SignupPage: React.FC = () => {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                placeholder="Minimum 6 characters"
                 className="w-full px-3 py-2 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
               />
               {/* Password strength indicator */}
@@ -149,7 +247,7 @@ export const SignupPage: React.FC = () => {
                   <div className={`h-full transition-all duration-300 ${strength.width} ${strength.color}`} />
                 </div>
                 <div className="flex items-center justify-between text-[10px] font-code text-outline">
-                  <span>Entropy Security:</span>
+                  <span>Password Security:</span>
                   <span className="font-bold text-on-surface">{strength.text}</span>
                 </div>
               </div>
@@ -165,7 +263,7 @@ export const SignupPage: React.FC = () => {
                   className="mt-0.5 rounded border-surface-container-highest accent-primary-container"
                 />
                 <span>
-                  I agree to the <a href="#terms" className="text-primary-container hover:underline">Terms of Service</a> and allow RepoLens to execute local AST telemetry on uploaded codebases.
+                  I agree to the Terms of Service and allow RepoLens to execute local AST telemetry on uploaded codebases.
                 </span>
               </label>
             </div>
@@ -178,7 +276,7 @@ export const SignupPage: React.FC = () => {
               {loading ? (
                 <>
                   <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
-                  <span>Configuring Workspace...</span>
+                  <span>Creating Account...</span>
                 </>
               ) : (
                 <>
@@ -200,8 +298,10 @@ export const SignupPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="text-center text-xs text-outline font-code max-w-5xl mx-auto w-full py-2">
-        <span>RepoLens Intelligence • SOC2 Type II Certified AST Engine</span>
+        <span>RepoLens Intelligence • Supabase Identity Authorization</span>
       </footer>
     </div>
   );
 };
+
+export default SignupPage;

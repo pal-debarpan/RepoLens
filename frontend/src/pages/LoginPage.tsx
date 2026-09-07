@@ -2,24 +2,118 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { RepoLensLogo } from '../components/common/RepoLensLogo';
 import { useApp } from '../context';
+import { supabase } from '../services/supabaseClient';
+import { userService, setAuthToken } from '../services/api';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useApp();
+  const { theme, toggleTheme, setUser, refreshRepositories } = useApp();
 
-  const [email, setEmail] = useState('developer@repolens.io');
-  const [password, setPassword] = useState('••••••••••••');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isUnconfirmed, setIsUnconfirmed] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg(null);
+    setResendSuccess(null);
+    setIsUnconfirmed(false);
     setLoading(true);
-    setTimeout(() => {
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+
+      if (error) {
+        if (
+          error.message.toLowerCase().includes('email not confirmed') ||
+          (error as any).code === 'email_not_confirmed'
+        ) {
+          setIsUnconfirmed(true);
+          setErrorMsg('Your email address has not been confirmed yet. Please check your inbox.');
+        } else if (error.message.toLowerCase().includes('invalid login credentials')) {
+          setErrorMsg('Invalid email or password. Please verify your credentials and try again.');
+        } else {
+          setErrorMsg(error.message || 'Authentication failed.');
+        }
+        setLoading(false);
+        return;
+      }
+
+      if (data.session && data.user) {
+        const token = data.session.access_token;
+        setAuthToken(token);
+
+        const displayName =
+          data.user.user_metadata?.display_name ||
+          data.user.user_metadata?.full_name ||
+          email.split('@')[0] ||
+          'Developer';
+
+        await userService.syncUser(token, {
+          displayName,
+          provider: 'email',
+        });
+
+        setUser({
+          email: data.user.email || email,
+          displayName,
+          provider: 'email',
+        });
+
+        await refreshRepositories();
+        setLoading(false);
+        navigate('/app');
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'An unexpected authentication error occurred.');
       setLoading(false);
-      navigate('/app');
-    }, 400);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!email) {
+      setErrorMsg('Please enter your email address to resend confirmation.');
+      return;
+    }
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email.trim(),
+      });
+      if (error) {
+        setErrorMsg(`Resend failed: ${error.message}`);
+      } else {
+        setResendSuccess(`Confirmation email re-sent to ${email.trim()}. Please check your inbox.`);
+        setIsUnconfirmed(false);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to resend confirmation email.');
+    }
+  };
+
+  const handleOAuthLogin = async (providerName: 'github' | 'gitlab') => {
+    setErrorMsg(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: providerName as any,
+        options: {
+          redirectTo: `${window.location.origin}/app`,
+        },
+      });
+      if (error) {
+        setErrorMsg(`OAuth login failed: ${error.message}`);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'OAuth authentication error');
+    }
   };
 
   return (
@@ -55,17 +149,49 @@ export const LoginPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Feedback Messages */}
+          {errorMsg && (
+            <div className="p-3.5 rounded-lg bg-error-container/20 border border-error/50 text-error flex items-start gap-2.5 text-xs font-medium">
+              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">error</span>
+              <div className="flex-1 space-y-1">
+                <span className="font-bold block">Authentication Error</span>
+                <span>{errorMsg}</span>
+                {isUnconfirmed && (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleResendConfirmation}
+                      className="px-2.5 py-1 rounded bg-error/20 hover:bg-error/30 text-on-surface text-[11px] font-semibold transition-colors"
+                    >
+                      Resend Confirmation Email →
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {resendSuccess && (
+            <div className="p-3.5 rounded-lg bg-primary-container/20 border border-primary-container/50 text-primary-container flex items-start gap-2.5 text-xs font-medium">
+              <span className="material-symbols-outlined text-[18px] shrink-0 mt-0.5">mark_email_read</span>
+              <div className="flex-1">
+                <span className="font-bold block">Confirmation Email Sent</span>
+                <span>{resendSuccess}</span>
+              </div>
+            </div>
+          )}
+
           {/* Social OAuth Providers */}
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => handleOAuthLogin('github')}
               className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
             >
               <span className="material-symbols-outlined text-[18px]">deployed_code</span>
               <span>GitHub</span>
             </button>
             <button
-              onClick={() => navigate('/app')}
+              onClick={() => handleOAuthLogin('gitlab')}
               className="flex items-center justify-center gap-2 p-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high border border-surface-container-highest transition-colors font-headline-sm text-xs font-semibold text-on-surface"
             >
               <span className="material-symbols-outlined text-[18px]">merge</span>
@@ -102,7 +228,18 @@ export const LoginPage: React.FC = () => {
                 </label>
                 <button
                   type="button"
-                  onClick={() => alert('Password reset email dispatched to developer@repolens.io')}
+                  onClick={async () => {
+                    if (!email) {
+                      setErrorMsg('Please enter your email address to request a password reset.');
+                      return;
+                    }
+                    const { error } = await supabase.auth.resetPasswordForEmail(email);
+                    if (error) {
+                      setErrorMsg(error.message);
+                    } else {
+                      setResendSuccess('Password reset instructions sent to ' + email);
+                    }
+                  }}
                   className="text-[11px] text-primary-container hover:underline font-code"
                 >
                   Forgot?
@@ -114,6 +251,7 @@ export const LoginPage: React.FC = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Your password"
                   className="w-full px-3 py-2 pr-9 rounded-lg bg-surface-container border border-surface-container-highest text-on-surface font-code text-xs focus:outline-none focus:border-primary-container transition-colors"
                 />
                 <button
@@ -159,12 +297,19 @@ export const LoginPage: React.FC = () => {
             </button>
           </form>
 
-          {/* Instant Demo Bypass */}
+          {/* Public Demo Console Exploration Option */}
           <div className="p-3 rounded-lg bg-surface-container border border-surface-container-highest text-center space-y-1">
-            <span className="text-[11px] text-outline font-code">Need immediate access?</span>
+            <span className="text-[11px] text-outline font-code">Explore sample analysis baseline?</span>
             <div>
               <button
-                onClick={() => navigate('/app')}
+                onClick={() => {
+                  setUser({
+                    email: 'guest@repolens.demo',
+                    displayName: 'Guest Demo User',
+                    provider: 'demo',
+                  });
+                  navigate('/app');
+                }}
                 className="text-xs font-code text-primary-container hover:underline font-semibold"
               >
                 Explore Demo Console with Sample Repositories →
@@ -183,8 +328,10 @@ export const LoginPage: React.FC = () => {
 
       {/* Footer */}
       <footer className="text-center text-xs text-outline font-code max-w-5xl mx-auto w-full py-2">
-        <span>RepoLens AST Security Engine • 256-bit Token Authorization</span>
+        <span>RepoLens AST Security Engine • Supabase Auth Identity Verification</span>
       </footer>
     </div>
   );
 };
+
+export default LoginPage;

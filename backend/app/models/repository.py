@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, DateTime, Enum, Index, Integer
+from sqlalchemy import Column, String, DateTime, Enum, ForeignKey, Index, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -22,6 +22,12 @@ class Repository(Base):
     __tablename__ = "repositories"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("profiles.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     source_type = Column(Enum(SourceType, name="sourcetype", create_constraint=True), nullable=False)
     source_url = Column(String, nullable=False)
     
@@ -39,8 +45,9 @@ class Repository(Base):
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     # Relationships
+    user = relationship("User", backref="repositories", lazy="joined")
     analyses = relationship("Analysis", back_populates="repository", cascade="all, delete-orphan")
 
     __table_args__ = (
-        Index("uix_source_type_url", "source_type", "source_url", unique=True),
+        Index("uix_user_source_type_url", "user_id", "source_type", "source_url"),
     )

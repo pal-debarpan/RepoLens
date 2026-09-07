@@ -1,7 +1,18 @@
 import { createContext } from 'react';
 import { Repository, ThemeMode } from '../types';
 
+export interface UserProfile {
+  id?: string;
+  email: string;
+  displayName?: string;
+  avatarUrl?: string;
+  provider?: string;
+}
+
 export interface AppContextType {
+  user: UserProfile | null;
+  setUser: (user: UserProfile | null) => void;
+  signOut: () => void;
   activeRepoId: string;
   setActiveRepoId: (id: string) => void;
   activeRepo: Repository | undefined;
