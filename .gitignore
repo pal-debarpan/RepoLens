@@ -110,3 +110,6 @@ Frontend/.vscode/*
 
 # Ignore files ending with hmm.mp4
 *hmm.mp4
+.vercel
+.env*
+!.env.example
