@@ -9,6 +9,9 @@ import {
   MOCK_ARCHITECTURE_LINKS,
   MOCK_TESTING_RECOMMENDATIONS,
   MOCK_FILE_TREE,
+  MOCK_VULNERABILITIES,
+  MOCK_SBOM,
+  MOCK_SBOM_SUMMARY,
 } from './mockData';
 import {
   Repository,
@@ -22,7 +25,11 @@ import {
   TestingRecommendation,
   FileTreeNode,
   ChatMessage,
+  VulnerabilitiesData,
+  CycloneDXBOM,
+  SbomSummaryData,
 } from '../types';
+
 
 const RAW_API_URL = import.meta.env.VITE_API_URL || '';
 const API_BASE = RAW_API_URL ? `${RAW_API_URL.replace(/\/$/, '')}/api/v1` : '/api/v1';
@@ -273,6 +280,61 @@ export const analysisService = {
   getTesting: async (analysisId: string) => {
     return await fetchApi<any>(`/analyses/${analysisId}/testing`);
   },
+
+  getVulnerabilities: async (analysisId: string): Promise<VulnerabilitiesData> => {
+    const res = await fetchApi<VulnerabilitiesData>(`/analyses/${analysisId}/vulnerabilities`);
+    if (res) return res;
+    return MOCK_VULNERABILITIES;
+  },
+
+  getSbom: async (analysisId: string): Promise<CycloneDXBOM> => {
+    const res = await fetchApi<CycloneDXBOM>(`/analyses/${analysisId}/sbom`);
+    if (res) return res;
+    return MOCK_SBOM;
+  },
+
+  getSbomSummary: async (analysisId: string): Promise<SbomSummaryData> => {
+    const res = await fetchApi<SbomSummaryData>(`/analyses/${analysisId}/sbom/summary`);
+    if (res) return res;
+    return MOCK_SBOM_SUMMARY;
+  },
+
+  downloadSbomJson: async (analysisId: string): Promise<void> => {
+    try {
+      const token = getAuthToken();
+      const headers: Record<string, string> = {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch(`${API_BASE}/analyses/${analysisId}/sbom?download=true`, { headers });
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `repolens-sbom-${analysisId.slice(0, 8)}.json`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return;
+      }
+    } catch (e) {
+      console.warn('Direct download failed, falling back to mock JSON:', e);
+    }
+    // Client-side fallback download
+    const blob = new Blob([JSON.stringify(MOCK_SBOM, null, 2)], { type: 'application/json' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `repolens-sbom-${analysisId.slice(0, 8)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+
+
+
 
   chatWithAi: async (
     analysisId: string,

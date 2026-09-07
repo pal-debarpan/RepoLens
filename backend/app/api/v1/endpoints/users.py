@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthenticatedUser, get_current_user_required
@@ -43,43 +42,50 @@ def upsert_current_user(
     - `email` is the verified JWT `email` claim — cannot be spoofed via request body.
     - Only `display_name`, `avatar_url`, and `provider` can be updated by the user.
     """
-    if not current_user.email:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="JWT does not contain an email claim. Cannot create user record.",
-        )
-
     user_id = uuid.UUID(str(current_user.id))
     now = _utc_now()
 
     user = db.get(User, user_id)
 
     if user is None:
-        # First login — create the row
+        # First login — create the row.
+        # display_name maps to full_name column; last_seen_at maps to updated_at.
         user = User(
             id=user_id,
-            email=current_user.email,
-            display_name=body.display_name,
+            email=current_user.email,          # from JWT; may be None if no email claim
+            display_name=body.display_name,    # → stored as full_name in Supabase
             avatar_url=body.avatar_url,
             provider=body.provider or "email",
             created_at=now,
-            last_seen_at=now,
+            last_seen_at=now,                  # → stored as updated_at in Supabase
         )
         db.add(user)
         logger.info("Created user record for %s", user_id)
     else:
-        # Subsequent login — update mutable fields and refresh last_seen_at
+        # Subsequent login — update mutable fields and refresh last_seen_at.
         if body.display_name is not None:
             user.display_name = body.display_name
         if body.avatar_url is not None:
             user.avatar_url = body.avatar_url
         if body.provider is not None:
             user.provider = body.provider
+        # Always update email from JWT in case it changed (e.g. verified email)
+        if current_user.email:
+            user.email = current_user.email
         user.last_seen_at = now
         logger.info("Updated user record for %s (last_seen_at refreshed)", user_id)
 
-    db.commit()
-    db.refresh(user)
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Failed to upsert user %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to save user profile. Please try again.",
+        )
+
     return UserResponse.model_validate(user)
 
 

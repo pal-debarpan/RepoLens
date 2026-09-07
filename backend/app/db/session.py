@@ -21,19 +21,28 @@ def get_engine() -> Engine:
     """
     global _engine
     if _engine is None:
+        import os
         if not settings.DATABASE_URL:
-            raise RuntimeError(
-                "DATABASE_URL is not configured. Please set DATABASE_URL in your environment or .env file."
-            )
+            # Allow in-memory SQLite fallback for tests when explicitly enabled via env var.
+            if os.getenv("ALLOW_IN_MEMORY_DB", "false").lower() in ("true", "1"):
+                fallback_url = "sqlite:///:memory:"
+                logger.info("DATABASE_URL not set; falling back to in-memory SQLite for testing.")
+                engine_url = fallback_url
+            else:
+                raise RuntimeError(
+                    "DATABASE_URL is not configured. Please set DATABASE_URL in your environment or .env file."
+                )
+        else:
+            engine_url = settings.DATABASE_URL
         engine_kwargs: dict[str, Any] = {
             "pool_pre_ping": settings.DB_POOL_PRE_PING,
         }
         # SQLite (e.g. during isolated testing) does not support pool_size or max_overflow
-        if not settings.DATABASE_URL.startswith("sqlite"):
+        if not engine_url.startswith("sqlite"):
             engine_kwargs["pool_size"] = settings.DB_POOL_SIZE
             engine_kwargs["max_overflow"] = settings.DB_MAX_OVERFLOW
 
-        _engine = create_engine(settings.DATABASE_URL, **engine_kwargs)
+        _engine = create_engine(engine_url, **engine_kwargs)
     return _engine
 
 

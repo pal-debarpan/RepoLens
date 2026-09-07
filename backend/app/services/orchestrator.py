@@ -19,13 +19,18 @@ from app.services import (
     dependency,
     entry_points as ep_svc,
     graph as graph_svc,
+    osv_service,
     parser,
     quality as quality_svc,
     scanner,
+    sbom_generator,
     security,
     testing as testing_svc,
 )
 from app.services.resolver import resolve_import
+from app.schemas.vulnerability import VulnerabilitiesResponse
+from app.schemas.sbom import CycloneDXBOM
+
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +146,40 @@ def run_analysis_pipeline(
         # Dependency
         all_findings.extend(dependency.analyze_dependencies(workspace_path, parsed_by_path, all_file_paths))
 
+        # ── Step 7.5: OSV Vulnerability Analysis ──────────────────────────
+        # Queries the OSV API for each detected dependency.
+        # Results are:
+        #   (a) Converted to SECURITY findings so they feed the existing
+        #       quality-scoring security penalty formula.
+        #   (b) Persisted separately as vulnerability_details (JSON) for the
+        #       dedicated /analyses/{id}/vulnerabilities endpoint.
+        # OSV errors are fully isolated — the pipeline never crashes.
+        logger.info("[%s] Running OSV vulnerability analysis", analysis_id)
+        osv_result: VulnerabilitiesResponse = osv_service.run_osv_analysis(
+            workspace_path, parsed_by_path
+        )
+        osv_findings = osv_service.findings_from_osv(osv_result)
+        all_findings.extend(osv_findings)
+        if osv_findings:
+            logger.info(
+                "[%s] OSV: %d vulnerability findings added to pipeline",
+                analysis_id, len(osv_findings),
+            )
+
+        # ── Step 7.6: CycloneDX SBOM Generation ───────────────────────────
+        # Generates a standard CycloneDX 1.5 JSON Software Bill of Materials (SBOM)
+        # enriched with PURLs, direct/transitive status, blast-radius affected files,
+        # and correlated OSV vulnerability counts.
+        logger.info("[%s] Generating CycloneDX SBOM", analysis_id)
+        repo_display_name = getattr(analysis.repository, "name", None) or "repository"
+        sbom_result: CycloneDXBOM = sbom_generator.generate_cyclonedx_sbom(
+            workspace_root=workspace_path,
+            parsed_files=parsed_by_path,
+            vulnerabilities=osv_result,
+            repo_name=repo_display_name,
+            commit_sha=analysis.commit_sha,
+        )
+
         # ── Step 7: Quality score ──────────────────────────────────────────
         logger.info("[%s] Computing quality score", analysis_id)
         quality_result = quality_svc.calculate_quality_score(file_records, all_findings, G)
@@ -186,6 +225,7 @@ def run_analysis_pipeline(
             "findings_by_severity": sev_counts,
             "quality_score": quality_result.overall_score,
             "quality_grade": quality_result.grade,
+            "sbom_component_count": len(sbom_result.components),
         }
 
         # Graph data (serialized)
@@ -196,6 +236,13 @@ def run_analysis_pipeline(
 
         # Testing details
         analysis.testing_details = testing_result.model_dump()
+
+        # Vulnerability details (OSV scan results)
+        analysis.vulnerability_details = osv_result.model_dump()
+
+        # SBOM details (CycloneDX 1.5 JSON)
+        analysis.sbom_details = sbom_result.model_dump(by_alias=True)
+
 
         # Persist findings
         for fc in all_findings:

@@ -1,3 +1,4 @@
+import logging
 import uuid
 from typing import Any, List, Optional
 from uuid import UUID
@@ -11,6 +12,8 @@ from app.db.session import get_db
 from app.ingestion.github import ingest_github_repo
 from app.ingestion.zip import ingest_zip_upload
 from app.ingestion.exceptions import IngestionError, SecurityError, ResourceLimitError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -54,23 +57,34 @@ def ingest_github(
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
     except IngestionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error during github ingestion of %s: %s", target_url, e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Ingestion failed due to an unexpected error.")
 
     user_id = uuid.UUID(str(current_user.id)) if current_user else None
     repo_dict = _ingested_to_dict(ingested)
-    repository = crud.repository.get_by_source(
-        db,
-        source_type=ingested.source_type,
-        source_url=ingested.source_url,
-        user_id=user_id,
-    )
     
-    if repository:
-        update_dict = {k: v for k, v in repo_dict.items() if k not in ("source_type", "source_url")}
-        repo_update = schemas.RepositoryUpdate(**update_dict)
-        repository = crud.repository.update(db=db, db_obj=repository, obj_in=repo_update)
-    else:
-        repo_create = schemas.RepositoryCreate(**repo_dict)
-        repository = crud.repository.create(db=db, obj_in=repo_create, user_id=user_id)
+    try:
+        repository = crud.repository.get_by_source(
+            db,
+            source_type=ingested.source_type,
+            source_url=ingested.source_url,
+            user_id=user_id,
+        )
+        
+        if repository:
+            update_dict = {k: v for k, v in repo_dict.items() if k not in ("source_type", "source_url")}
+            repo_update = schemas.RepositoryUpdate(**update_dict)
+            repository = crud.repository.update(db=db, db_obj=repository, obj_in=repo_update)
+        else:
+            repo_create = schemas.RepositoryCreate(**repo_dict)
+            repository = crud.repository.create(db=db, obj_in=repo_create, user_id=user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to persist ingested repository %s: %s", target_url, e)
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save repository to database.")
         
     return repository
 
@@ -93,23 +107,34 @@ def ingest_upload(
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(e))
     except IngestionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.exception("Unexpected error during zip upload ingestion: %s", e)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Upload processing failed.")
 
     user_id = uuid.UUID(str(current_user.id)) if current_user else None
     repo_dict = _ingested_to_dict(ingested)
-    repository = crud.repository.get_by_source(
-        db,
-        source_type=ingested.source_type,
-        source_url=ingested.source_url,
-        user_id=user_id,
-    )
-    
-    if repository:
-        update_dict = {k: v for k, v in repo_dict.items() if k not in ("source_type", "source_url")}
-        repo_update = schemas.RepositoryUpdate(**update_dict)
-        repository = crud.repository.update(db=db, db_obj=repository, obj_in=repo_update)
-    else:
-        repo_create = schemas.RepositoryCreate(**repo_dict)
-        repository = crud.repository.create(db=db, obj_in=repo_create, user_id=user_id)
+
+    try:
+        repository = crud.repository.get_by_source(
+            db,
+            source_type=ingested.source_type,
+            source_url=ingested.source_url,
+            user_id=user_id,
+        )
+        
+        if repository:
+            update_dict = {k: v for k, v in repo_dict.items() if k not in ("source_type", "source_url")}
+            repo_update = schemas.RepositoryUpdate(**update_dict)
+            repository = crud.repository.update(db=db, db_obj=repository, obj_in=repo_update)
+        else:
+            repo_create = schemas.RepositoryCreate(**repo_dict)
+            repository = crud.repository.create(db=db, obj_in=repo_create, user_id=user_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except Exception as e:
+        logger.exception("Failed to persist uploaded repository: %s", e)
+        db.rollback()
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to save repository to database.")
         
     return repository
 

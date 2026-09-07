@@ -3,7 +3,7 @@ import logging
 import threading
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import AuthenticatedUser, get_current_user_optional, get_current_user_required
@@ -18,17 +18,23 @@ from app.schemas.finding import FindingFilterParams, FindingResponse
 from app.schemas.graph import FileGraphResponse, GraphResponse
 from app.schemas.quality import QualityResponse
 from app.schemas.testing import TestingResponse
+from app.schemas.vulnerability import VulnerabilitiesResponse
+from app.schemas.sbom import CycloneDXBOM, SbomSummaryResponse
 from app.services import blast_radius as blast_svc
 from app.services import graph as graph_svc
-from app.services import orchestrator
+from app.services import orchestrator, sbom_generator
 from app.services.demo_fixture import (
     DEMO_ANALYSIS_ID,
     DEMO_BLAST_RADIUS,
     DEMO_GRAPH,
+    DEMO_VULNERABILITIES,
+    DEMO_SBOM,
+    DEMO_SBOM_SUMMARY,
     get_demo_analysis,
     get_demo_chat_response,
 )
 from app.services.gemini import chat_with_gemini
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -115,9 +121,17 @@ def create_analysis(
         commit_sha=body.commit_sha or repo.latest_commit_sha,
         status=AnalysisStatus.PENDING,
     )
-    db.add(analysis)
-    db.commit()
-    db.refresh(analysis)
+    try:
+        db.add(analysis)
+        db.commit()
+        db.refresh(analysis)
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to create analysis record: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create analysis record — please try again",
+        )
 
     # Run pipeline in background thread
     analysis_id = analysis.id
@@ -189,6 +203,7 @@ def get_analysis(
     graph_data = None
     quality_data = None
     testing_data = None
+    vulnerability_data = None
 
     if analysis.graph_data:
         try:
@@ -208,6 +223,20 @@ def get_analysis(
         except Exception:
             pass
 
+    if analysis.vulnerability_details:
+        try:
+            vulnerability_data = VulnerabilitiesResponse.model_validate(analysis.vulnerability_details)
+        except Exception:
+            pass
+
+    sbom_data = None
+    if analysis.sbom_details:
+        try:
+            bom = CycloneDXBOM.model_validate(analysis.sbom_details)
+            sbom_data = sbom_generator.summarize_sbom(bom)
+        except Exception:
+            pass
+
     findings = [
         FindingResponse.model_validate(f)
         for f in db.query(Finding).filter(Finding.analysis_id == analysis_id).all()
@@ -219,8 +248,11 @@ def get_analysis(
         graph=graph_data,
         quality=quality_data,
         testing=testing_data,
+        vulnerabilities=vulnerability_data,
+        sbom=sbom_data,
         findings=findings,
     )
+
 
 
 # ─── GET /analyses/{id}/blast-radius ───────────────────────────────────────────
@@ -479,6 +511,137 @@ def get_testing(
         raise HTTPException(status_code=404, detail="Testing data not yet available")
 
     return TestingResponse.model_validate(analysis.testing_details)
+
+
+# ─── GET /analyses/{id}/vulnerabilities ────────────────────────────────────────
+
+@router.get(
+    "/{analysis_id}/vulnerabilities",
+    response_model=VulnerabilitiesResponse,
+    summary="Get OSV vulnerability scan results",
+    description="Returns the normalized OSV dependency vulnerability assessment for the analysis.",
+)
+def get_vulnerabilities(
+    analysis_id: uuid.UUID = Path(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+) -> VulnerabilitiesResponse:
+    if _is_demo(analysis_id):
+        return DEMO_VULNERABILITIES
+
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
+    if not analysis.vulnerability_details:
+        return VulnerabilitiesResponse(packages_scanned=0, osv_available=True)
+
+    try:
+        return VulnerabilitiesResponse.model_validate(analysis.vulnerability_details)
+    except Exception as e:
+        logger.warning(f"Failed to deserialize vulnerability_details for {analysis_id}: {e}")
+        return VulnerabilitiesResponse(
+            packages_scanned=0,
+            osv_available=False,
+            error_message="Failed to load vulnerability data",
+        )
+
+
+# ─── GET /analyses/{id}/sbom ───────────────────────────────────────────────────
+
+@router.get(
+    "/{analysis_id}/sbom",
+    response_model=CycloneDXBOM,
+    summary="Get CycloneDX 1.5 JSON SBOM",
+    description=(
+        "Returns the full CycloneDX 1.5 JSON Software Bill of Materials (SBOM) for the analyzed repository. "
+        "Use ?download=true to trigger a direct JSON file attachment download."
+    ),
+)
+def get_sbom(
+    analysis_id: uuid.UUID = Path(...),
+    download: bool = Query(False, description="Set to true to download as repolens-sbom.json attachment"),
+    db: Session = Depends(get_db),
+    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+):
+    if _is_demo(analysis_id):
+        sbom_bom = DEMO_SBOM
+    else:
+        user_id = uuid.UUID(str(current_user.id)) if current_user else None
+        analysis = _get_analysis_or_404(db, analysis_id, user_id)
+        if not analysis.sbom_details:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SBOM data not available for this analysis",
+            )
+        try:
+            sbom_bom = CycloneDXBOM.model_validate(analysis.sbom_details)
+        except Exception as e:
+            logger.warning(f"Failed to deserialize sbom_details for {analysis_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to parse SBOM data",
+            )
+
+    if download:
+        raw_json = sbom_bom.model_dump_json(by_alias=True, indent=2)
+        filename = f"repolens-sbom-{str(analysis_id)[:8]}.json"
+        return Response(
+            content=raw_json,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    return sbom_bom
+
+
+# ─── GET /analyses/{id}/sbom/summary ───────────────────────────────────────────
+
+@router.get(
+    "/{analysis_id}/sbom/summary",
+    response_model=SbomSummaryResponse,
+    summary="Get SBOM summary metrics and components",
+    description="Returns a lightweight summary of the CycloneDX SBOM including component counts, direct/transitive breakdown, and ecosystems.",
+)
+def get_sbom_summary(
+    analysis_id: uuid.UUID = Path(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+) -> SbomSummaryResponse:
+    if _is_demo(analysis_id):
+        return DEMO_SBOM_SUMMARY
+
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
+    if not analysis.sbom_details:
+        return SbomSummaryResponse(
+            format="CycloneDX",
+            spec_version="1.5",
+            serial_number=f"urn:uuid:{analysis_id}",
+            component_count=0,
+            direct_count=0,
+            transitive_count=0,
+            vulnerable_components_count=0,
+            ecosystems=[],
+            components=[],
+        )
+
+    try:
+        bom = CycloneDXBOM.model_validate(analysis.sbom_details)
+        return sbom_generator.summarize_sbom(bom)
+    except Exception as e:
+        logger.warning(f"Failed to summarize sbom_details for {analysis_id}: {e}")
+        return SbomSummaryResponse(
+            format="CycloneDX",
+            spec_version="1.5",
+            serial_number=f"urn:uuid:{analysis_id}",
+            component_count=0,
+            direct_count=0,
+            transitive_count=0,
+            vulnerable_components_count=0,
+            ecosystems=[],
+            components=[],
+        )
+
+
 
 
 # ─── POST /analyses/{id}/chat ───────────────────────────────────────────────────

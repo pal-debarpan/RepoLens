@@ -50,9 +50,19 @@ class GitHubIngestRequest(BaseModel):
         description="GitHub Personal Access Token for private repository access. Not stored.",
     )
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "url": "https://github.com/pal-debarpan/Minecraft-3D-Web-App.git"
+            }
+        }
+    )
+
     @model_validator(mode='after')
     def validate_github_url(self) -> "GitHubIngestRequest":
-        target = self.url or self.source_url
+        url_clean = self.url.strip() if self.url and self.url.strip() != "string" else None
+        source_clean = self.source_url.strip() if self.source_url and self.source_url.strip() != "string" else None
+        target = url_clean or source_clean
         if not target:
             raise ValueError("Either 'url' or 'source_url' must be provided.")
         if not (target.startswith("https://github.com/") or target.startswith("http://github.com/")):

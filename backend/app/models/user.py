@@ -23,6 +23,10 @@ class User(Base):
     - Authentication is fully delegated to Supabase Auth.
     - The `email` column is populated from the verified JWT; it cannot be
       spoofed because the JWT is signed by Supabase.
+
+    Column mapping (SQLAlchemy → Supabase):
+    - display_name → full_name
+    - last_seen_at → updated_at
     """
 
     __tablename__ = "profiles"
@@ -31,13 +35,17 @@ class User(Base):
         UUID(as_uuid=True),
         primary_key=True,
     )
-    email = Column(String(320), unique=True, nullable=False, index=True)
-    display_name = Column(String(255), nullable=True)
+    # Supabase uses 'email' — added in migration 004
+    email = Column(String(320), unique=True, nullable=True, index=True)
+    # Supabase column is 'full_name'; backend refers to it as display_name
+    display_name = Column("full_name", String(255), nullable=True)
     avatar_url = Column(Text, nullable=True)
-    provider = Column(String(64), nullable=False, server_default="email")
+    # Added in migration 004
+    provider = Column(String(64), nullable=True, server_default="email")
 
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
-    last_seen_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+    # Supabase column is 'updated_at'; backend refers to it as last_seen_at
+    last_seen_at = Column("updated_at", DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
 
 # Alias for code compatibility

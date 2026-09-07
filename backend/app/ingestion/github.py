@@ -17,7 +17,7 @@ from app.ingestion.exceptions import IngestionError, ResourceLimitError, Securit
 
 logger = logging.getLogger(__name__)
 
-GITHUB_URL_REGEX = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?$")
+GITHUB_URL_REGEX = re.compile(r"^https://github\.com/([\w.-]+)/([\w.-]+?)(?:\.git)?/?$", re.IGNORECASE)
 
 EXTENSION_LANGUAGE_MAP = {
     ".py": "Python",
@@ -194,6 +194,7 @@ def ingest_github_repo(url: str, pat: Optional[str] = None) -> IngestedRepositor
       - Private repos: a PAT must be supplied; the API is checked before cloning.
       - The PAT is NEVER stored in the database or written to logs.
     """
+    url = url.strip()
     match = GITHUB_URL_REGEX.match(url)
     if not match:
         raise SecurityError("Invalid GitHub URL format.")

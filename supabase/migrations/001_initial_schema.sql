@@ -14,6 +14,14 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     last_seen_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Ensure columns exist if profiles table pre-existed
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS display_name TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'email';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_profiles_email ON public.profiles (email);
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;

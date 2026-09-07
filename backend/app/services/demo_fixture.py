@@ -17,8 +17,19 @@ from app.schemas.finding import FindingResponse
 from app.schemas.graph import GraphEdge, GraphNode, GraphResponse
 from app.schemas.quality import QualityCharacteristic, QualityResponse
 from app.schemas.testing import TestRecommendation, TestingPriority, TestingResponse
+from app.schemas.vulnerability import VulnerabilitiesResponse, VulnerabilityItem, VulnerablePackage
+from app.schemas.sbom import (
+    CycloneDXBOM,
+    CycloneDXComponent,
+    CycloneDXDependency,
+    CycloneDXMetadata,
+    CycloneDXMetadataComponent,
+    SbomSummaryResponse,
+)
+from app.services.sbom_generator import summarize_sbom
 from app.models.analysis import AnalysisStatus
 from app.models.finding import FindingCategory, FindingSeverity
+
 
 DEMO_REPO_URL = "https://github.com/repolens/repolens-demo"
 DEMO_ANALYSIS_ID = uuid5(NAMESPACE_URL, DEMO_REPO_URL)
@@ -272,6 +283,182 @@ DEMO_TESTING = TestingResponse(
     ],
 )
 
+# ── Demo Vulnerability Data (OSV) ─────────────────────────────────────────────
+DEMO_VULNERABILITIES = VulnerabilitiesResponse(
+    packages_scanned=6,
+    vulnerable_packages=[
+        VulnerablePackage(
+            package_name="axios",
+            version="0.21.1",
+            ecosystem="npm",
+            vulnerabilities=[
+                VulnerabilityItem(
+                    id="GHSA-42xw-2xvc-qx8m",
+                    summary="axios vulnerable to Server-Side Request Forgery (SSRF)",
+                    severity="HIGH",
+                    fixed_versions=["0.21.2"],
+                    references=["https://github.com/advisories/GHSA-42xw-2xvc-qx8m"],
+                ),
+            ],
+            affected_files=[
+                "src/services/paymentService.js",
+                "src/services/notificationService.js",
+                "src/controllers/checkoutController.js",
+            ],
+        ),
+        VulnerablePackage(
+            package_name="lodash",
+            version="4.17.15",
+            ecosystem="npm",
+            vulnerabilities=[
+                VulnerabilityItem(
+                    id="GHSA-35jh-r3h4-6jhm",
+                    summary="Lodash prototype pollution via zip function",
+                    severity="MEDIUM",
+                    fixed_versions=["4.17.21"],
+                    references=["https://github.com/advisories/GHSA-35jh-r3h4-6jhm"],
+                ),
+            ],
+            affected_files=[
+                "src/utils/crypto.js",
+                "src/models/Payment.js",
+            ],
+        ),
+    ],
+    total_vulnerabilities=2,
+    osv_available=True,
+)
+
+# ── Demo SBOM Data (CycloneDX 1.5 JSON) ───────────────────────────────────────
+DEMO_SBOM = CycloneDXBOM(
+    bomFormat="CycloneDX",
+    specVersion="1.5",
+    serialNumber="urn:uuid:545b844d-271b-566a-be6a-71a00c89c96c",
+    version=1,
+    metadata=CycloneDXMetadata(
+        component=CycloneDXMetadataComponent(
+            type="application",
+            name="repolens-demo",
+            version="1.0.0",
+            description="PayPal / paymentService.js demonstration codebase",
+        )
+    ),
+    components=[
+        CycloneDXComponent(
+            type="library",
+            name="axios",
+            version="0.21.1",
+            bom_ref="pkg:npm/axios@0.21.1",
+            purl="pkg:npm/axios@0.21.1",
+            scope="required",
+            ecosystem="npm",
+            direct=True,
+            description="Promise based HTTP client for node.js and browser",
+            affected_files=[
+                "src/services/paymentService.js",
+                "src/services/notificationService.js",
+                "src/controllers/checkoutController.js",
+            ],
+            vulnerabilities_count=1,
+        ),
+        CycloneDXComponent(
+            type="library",
+            name="lodash",
+            version="4.17.15",
+            bom_ref="pkg:npm/lodash@4.17.15",
+            purl="pkg:npm/lodash@4.17.15",
+            scope="required",
+            ecosystem="npm",
+            direct=True,
+            description="Lodash modular utilities",
+            affected_files=[
+                "src/utils/crypto.js",
+                "src/models/Payment.js",
+            ],
+            vulnerabilities_count=1,
+        ),
+        CycloneDXComponent(
+            type="library",
+            name="express",
+            version="4.18.2",
+            bom_ref="pkg:npm/express@4.18.2",
+            purl="pkg:npm/express@4.18.2",
+            scope="required",
+            ecosystem="npm",
+            direct=True,
+            description="Fast, unopinionated, minimalist web framework for node",
+            affected_files=[
+                "index.js",
+                "src/controllers/paymentController.js",
+                "src/controllers/checkoutController.js",
+                "src/controllers/adminController.js",
+            ],
+            vulnerabilities_count=0,
+        ),
+        CycloneDXComponent(
+            type="library",
+            name="jsonwebtoken",
+            version="9.0.2",
+            bom_ref="pkg:npm/jsonwebtoken@9.0.2",
+            purl="pkg:npm/jsonwebtoken@9.0.2",
+            scope="required",
+            ecosystem="npm",
+            direct=True,
+            description="JSON Web Token implementation (symmetric and asymmetric)",
+            affected_files=[
+                "src/middleware/auth.js",
+            ],
+            vulnerabilities_count=0,
+        ),
+        CycloneDXComponent(
+            type="library",
+            name="body-parser",
+            version="1.20.2",
+            bom_ref="pkg:npm/body-parser@1.20.2",
+            purl="pkg:npm/body-parser@1.20.2",
+            scope="optional",
+            ecosystem="npm",
+            direct=False,
+            description="Node.js body parsing middleware",
+            affected_files=[],
+            vulnerabilities_count=0,
+        ),
+        CycloneDXComponent(
+            type="library",
+            name="debug",
+            version="4.3.4",
+            bom_ref="pkg:npm/debug@4.3.4",
+            purl="pkg:npm/debug@4.3.4",
+            scope="optional",
+            ecosystem="npm",
+            direct=False,
+            description="Small debugging utility",
+            affected_files=[],
+            vulnerabilities_count=0,
+        ),
+    ],
+    dependencies=[
+        CycloneDXDependency(
+            ref="pkg:application/repolens-demo@1.0.0",
+            dependsOn=[
+                "pkg:npm/axios@0.21.1",
+                "pkg:npm/lodash@4.17.15",
+                "pkg:npm/express@4.18.2",
+                "pkg:npm/jsonwebtoken@9.0.2",
+            ],
+        ),
+        CycloneDXDependency(
+            ref="pkg:npm/express@4.18.2",
+            dependsOn=[
+                "pkg:npm/body-parser@1.20.2",
+                "pkg:npm/debug@4.3.4",
+            ],
+        ),
+    ],
+)
+
+DEMO_SBOM_SUMMARY = summarize_sbom(DEMO_SBOM)
+
 
 def get_demo_analysis() -> AnalysisDetailResponse:
     """Return fully assembled demo analysis response."""
@@ -295,14 +482,18 @@ def get_demo_analysis() -> AnalysisDetailResponse:
             "findings_by_severity": {"CRITICAL": 1, "HIGH": 1, "MEDIUM": 2},
             "quality_score": 72.4,
             "quality_grade": "C",
+            "sbom_component_count": 6,
         },
         created_at=DEMO_CREATED_AT,
         completed_at=DEMO_COMPLETED_AT,
         graph=DEMO_GRAPH,
         quality=DEMO_QUALITY,
         testing=DEMO_TESTING,
+        vulnerabilities=DEMO_VULNERABILITIES,
+        sbom=DEMO_SBOM_SUMMARY,
         findings=DEMO_FINDINGS,
     )
+
 
 
 def get_demo_chat_response(message: str) -> ChatResponse:

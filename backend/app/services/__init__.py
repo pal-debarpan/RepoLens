@@ -7,10 +7,12 @@ from app.services import (
     gemini,
     graph,
     orchestrator,
+    osv_service,
     parser,
     quality,
     resolver,
     scanner,
+    sbom_generator,
     security,
     testing,
 )
@@ -23,10 +25,13 @@ __all__ = [
     "gemini",
     "graph",
     "orchestrator",
+    "osv_service",
     "parser",
     "quality",
     "resolver",
     "scanner",
+    "sbom_generator",
     "security",
     "testing",
 ]
+

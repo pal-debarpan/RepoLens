@@ -43,7 +43,8 @@ def test_declarative_base() -> None:
 def test_missing_database_url_raises_runtime_error() -> None:
     """Verify get_engine raises clear RuntimeError when DATABASE_URL is not set."""
     reset_db_state()
-    with patch("app.db.session.settings.DATABASE_URL", None):
+    with patch("app.db.session.settings.DATABASE_URL", None), \
+         patch.dict("os.environ", {"ALLOW_IN_MEMORY_DB": "false"}):
         with pytest.raises(RuntimeError) as exc_info:
             get_engine()
         assert "DATABASE_URL is not configured" in str(exc_info.value)

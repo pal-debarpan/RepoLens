@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserUpsertRequest(BaseModel):
@@ -22,10 +22,10 @@ class UserResponse(BaseModel):
     """Public representation of a user record. Never exposes internal secrets."""
 
     id: UUID
-    email: str
+    email: Optional[str] = None     # nullable until migration 004 adds the column
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
-    provider: str
+    provider: Optional[str] = None  # nullable until migration 004 adds the column
     created_at: datetime
     last_seen_at: datetime
 

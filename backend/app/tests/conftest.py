@@ -1,8 +1,12 @@
 import sys
+import os
 from pathlib import Path
 from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
+
+# Ensure fallback DB is allowed for tests that need a DB but don't set DATABASE_URL
+os.environ.setdefault("ALLOW_IN_MEMORY_DB", "true")
 
 # Ensure backend root is in sys.path for test discovery
 backend_dir = Path(__file__).resolve().parent.parent.parent

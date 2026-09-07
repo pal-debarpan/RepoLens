@@ -9,10 +9,13 @@ backend_dir = Path(__file__).resolve().parent.parent
 if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.v1.router import api_router
+from app.api.v1.endpoints.auth import router as auth_router
 from app.core.config import settings
 from app.db.session import check_db_connectivity, reset_db_state
 from app.schemas.common import HealthResponse, RootResponse
@@ -61,6 +64,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Global unhandled exception handler: logs full traceback to terminal, returns clean JSON to client
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, StarletteHTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    logger.exception("Unhandled error processing request %s %s: %s", request.method, request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
 # Configuration-driven CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -70,7 +84,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount versioned API router
+# Mount root-level auth router (/auth/signup, /auth/login)
+app.include_router(auth_router, prefix="/auth", tags=["auth"])
+
+# Mount versioned API router (/api/v1/...)
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 

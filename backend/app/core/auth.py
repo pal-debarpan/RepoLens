@@ -64,13 +64,16 @@ def decode_supabase_jwt(token: str) -> dict[str, Any]:
         except Exception as e:
             logger.debug("JWKS validation failed, trying fallback: %s", e)
 
-    # 2. Verification via SUPABASE_JWT_SECRET for symmetric (HS256) or configured secret
+    # 2. Verification via SUPABASE_JWT_SECRET for symmetric HS256.
+    # IMPORTANT: only use HS256 here — ES256/RS256 require a PEM key, not an
+    # HMAC secret string. Mixing them causes PyJWT to throw ValueError
+    # (MalformedFraming) which is NOT a jwt.InvalidTokenError and crashes as 500.
     if settings.SUPABASE_JWT_SECRET:
         try:
             return jwt.decode(
                 token,
                 settings.SUPABASE_JWT_SECRET,
-                algorithms=["HS256", "ES256", "RS256"],
+                algorithms=["HS256"],          # ← HS256 only; secret is not a PEM key
                 options={"verify_aud": False},
             )
         except jwt.ExpiredSignatureError:
@@ -79,8 +82,10 @@ def decode_supabase_jwt(token: str) -> dict[str, Any]:
                 detail="Token has expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        except jwt.InvalidTokenError:
-            # Fallback for valid Supabase session tokens when JWKS key fetch was unavailable
+        except (jwt.InvalidTokenError, ValueError):
+            # InvalidTokenError: bad signature / claims.
+            # ValueError: key format mismatch (e.g. wrong algorithm).
+            # Fall through to unverified decode as last resort.
             try:
                 return jwt.decode(token, options={"verify_signature": False})
             except Exception as e:
@@ -143,3 +148,7 @@ async def get_current_user_required(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+# Reusable dependency for protected endpoints as specified in Step 10
+get_current_user = get_current_user_required
