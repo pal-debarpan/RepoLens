@@ -26,6 +26,7 @@ from app.services import (
     sbom_generator,
     security,
     testing as testing_svc,
+    uml_extractor,
 )
 from app.services.resolver import resolve_import
 from app.schemas.vulnerability import VulnerabilitiesResponse
@@ -194,6 +195,15 @@ def run_analysis_pipeline(
         # ── Step 9: Serialize graph ────────────────────────────────────────
         graph_response = graph_svc.serialize_graph_response(G, blast_scores)
 
+        # ── Step 9.5: Extract detailed UML architecture ─────────────────────
+        logger.info("[%s] Extracting detailed UML architecture (AST)", analysis_id)
+        db_nodes, db_edges = uml_extractor.extract_architecture(
+            analysis_id=analysis.id,
+            workspace_path=workspace_path,
+            parsed_by_path=parsed_by_path,
+            resolved_deps=resolved_deps
+        )
+
         # ── Step 10: Persist results ───────────────────────────────────────
         logger.info("[%s] Persisting results (%d findings)", analysis_id, len(all_findings))
 
@@ -259,6 +269,11 @@ def run_analysis_pipeline(
                 metadata_payload=fc.metadata_payload,
             )
             db.add(finding)
+
+        if db_nodes:
+            logger.info("[%s] Persisting %d architecture nodes and %d edges", analysis_id, len(db_nodes), len(db_edges))
+            db.add_all(db_nodes)
+            db.add_all(db_edges)
 
         db.commit()
         logger.info("[%s] Analysis completed successfully", analysis_id)

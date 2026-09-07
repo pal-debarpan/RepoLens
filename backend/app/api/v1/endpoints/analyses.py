@@ -644,6 +644,55 @@ def get_sbom_summary(
 
 
 
+from app.schemas.architecture import UmlResponse
+from app.services.uml_extractor import generate_plantuml
+from app.models.analysis_graph_node import AnalysisGraphNode
+from app.models.analysis_graph_edge import AnalysisGraphEdge
+
+# ─── GET /analyses/{id}/architecture/uml ───────────────────────────────────────
+
+@router.get(
+    "/{analysis_id}/architecture/uml",
+    response_model=UmlResponse,
+    summary="Get UML Architecture Diagram",
+    description="Returns the extracted detailed architecture nodes in PlantUML format.",
+)
+def get_architecture_uml(
+    analysis_id: uuid.UUID = Path(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[AuthenticatedUser] = Depends(get_current_user_optional),
+) -> UmlResponse:
+    if _is_demo(analysis_id):
+        # Return a simple demo plantuml string
+        return UmlResponse(
+            diagram_type="plantuml",
+            plantuml_source="@startuml\npackage \"src/demo.py\" {\n  class DemoApp as 1234\n}\n@enduml",
+            total_nodes=1,
+            total_edges=0
+        )
+
+    user_id = uuid.UUID(str(current_user.id)) if current_user else None
+    analysis = _get_analysis_or_404(db, analysis_id, user_id)
+    
+    # Query architecture nodes
+    nodes = db.query(AnalysisGraphNode).filter(AnalysisGraphNode.analysis_id == analysis_id).all()
+    edges = db.query(AnalysisGraphEdge).filter(AnalysisGraphEdge.analysis_id == analysis_id).all()
+    
+    if not nodes:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Architecture data not available for this analysis"
+        )
+        
+    puml = generate_plantuml(nodes, edges)
+    
+    return UmlResponse(
+        diagram_type="plantuml",
+        plantuml_source=puml,
+        total_nodes=len(nodes),
+        total_edges=len(edges)
+    )
+
 # ─── POST /analyses/{id}/chat ───────────────────────────────────────────────────
 
 @router.post(
